@@ -16,9 +16,13 @@ Useful for when:
   Single Game Mode turns your Trimui Brick into a single game retro doodad, with no access to minui.
   - Boots right into your selected game.
   - Allow access to emulator menu for Save/Load, but hide Settings/Quit.
-  - Konami Code in Emulator menu disables lockedown and allows quitting back to minui to disable single game mode.
+  - Konami Code in Emulator menu disables lockdown and allows quitting back to minui to disable single game mode.
  
 Original NextUI Readme Below.
+
+
+---
+
 
 # NextUI (formerly MinUI Next)
 A CFW based of MinUI with a rebuild emulation engine and tons of added features for the TrimUI Brick and Smart Pro. For other devices we recommend checking out [MinUI](https://github.com/shauninman/MinUI)
