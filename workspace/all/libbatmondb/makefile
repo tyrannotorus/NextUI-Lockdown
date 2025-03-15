@@ -37,6 +37,7 @@ SOURCE = $(TARGET).c ../common/utils.c ../common/api.c ../../$(PLATFORM)/platfor
 # INCLUDEDIR = $(SYSROOT)/usr/include
 
 CFLAGS   = $(ARCH) -fomit-frame-pointer
+CFLAGS  += -I/usr/include
 CFLAGS  += $(INCDIR) -DPLATFORM=\"$(PLATFORM)\" -DUSE_$(SDL) -Ofast 
 LDFLAGS = -ldl -lrt $(LIBS) -l$(SDL) -l$(SDL)_image -l$(SDL)_ttf -lsqlite3 -s
 

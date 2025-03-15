@@ -40,4 +40,48 @@ int getInt(char* path);
 
 uint64_t getMicroseconds(void);
 
+enum EntryType {
+	ENTRY_DIR,
+	ENTRY_PAK,
+	ENTRY_ROM,
+};
+
+typedef struct Array {
+	int count;
+	int capacity;
+	void** items;
+} Array;
+
+typedef struct Hash {
+	Array* keys;
+	Array* values;
+} Hash; // not really a hash
+
+typedef struct Entry {
+	char* path;
+	char* name;
+	char* unique;
+	int type;
+	int alpha;
+} Entry;
+
+Array* Array_new(void);
+void Array_push(Array* self, void* item);
+void Array_unshift(Array* self, void* item);
+void* Array_pop(Array* self);
+void Array_reverse(Array* self);
+void Array_free(Array* self);
+int StringArray_indexOf(Array* self, char* str);
+void StringArray_free(Array* self);
+Hash* Hash_new(void);
+void Hash_free(Hash* self);
+void Hash_set(Hash* self, char* key, char* value);
+char* Hash_get(Hash* self, char* key);
+Entry* Entry_new(char* path, int type);
+void Entry_free(Entry* self);
+int EntryArray_indexOf(Array* self, char* path);
+int EntryArray_sortEntry(const void* a, const void* b);
+void EntryArray_sort(Array* self);
+void EntryArray_free(Array* self);
+
 #endif

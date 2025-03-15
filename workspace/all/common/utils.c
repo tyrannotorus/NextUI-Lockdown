@@ -450,3 +450,224 @@ uint64_t getMicroseconds(void) {
 
     return ret;
 }
+
+inline Array* Array_new(void) {
+    Array* self = malloc(sizeof(Array));
+    if (!self) return NULL;  // Allocation failure
+    
+    self->count = 0;
+    self->capacity = 8;
+    self->items = malloc(sizeof(void*) * self->capacity);
+    
+    if (!self->items) {  // Allocation failure
+        free(self);
+        return NULL;
+    }
+    
+    return self;
+}
+
+inline void Array_push(Array* self, void* item) {
+    if (!self) return;  // Null pointer check
+    
+    if (self->count >= self->capacity) {
+        int new_capacity = self->capacity * 2;
+        void** new_items = realloc(self->items, sizeof(void*) * new_capacity);
+        if (!new_items) return;  // Allocation failure
+        self->items = new_items;
+        self->capacity = new_capacity;
+    }
+    self->items[self->count++] = item;
+}
+
+inline void Array_unshift(Array* self, void* item) {
+    if (!self) return;  // Null pointer check
+    
+    if (self->count == 0) {
+        Array_push(self, item);
+        return;
+    }
+    
+    // Ensure capacity before shifting
+    if (self->count >= self->capacity) {
+        int new_capacity = self->capacity * 2;
+        void** new_items = realloc(self->items, sizeof(void*) * new_capacity);
+        if (!new_items) return;  // Allocation failure
+        self->items = new_items;
+        self->capacity = new_capacity;
+    }
+    
+    // Shift elements in one operation using memmove
+    memmove(&self->items[1], self->items, sizeof(void*) * self->count);
+    self->items[0] = item;
+    self->count++;
+}
+
+inline void* Array_pop(Array* self) {
+    if (!self || self->count == 0) return NULL;
+    return self->items[--self->count];
+}
+
+inline void Array_reverse(Array* self) {
+    if (!self || self->count <= 1) return;  // Early return for empty or single-item arrays
+    
+    void** start = self->items;
+    void** end = self->items + self->count - 1;
+    
+    // Optimization: Use pointer arithmetic instead of array indexing
+    while (start < end) {
+        void* temp = *start;
+        *start = *end;
+        *end = temp;
+        start++;
+        end--;
+    }
+}
+
+inline void Array_free(Array* self) {
+    if (!self) return;  // Null pointer check
+    
+    free(self->items);
+    free(self);
+}
+
+// Assumes exactMatch is an existing function that compares strings
+inline int StringArray_indexOf(Array* self, char* str) {
+    if (!self || !str) return -1;  // Null pointer check
+    
+    for (int i = 0; i < self->count; i++) {
+        if (exactMatch(self->items[i], str)) return i;
+    }
+    return -1;
+}
+
+inline void StringArray_free(Array* self) {
+    if (!self) return;  // Null pointer check
+    
+    for (int i = 0; i < self->count; i++) {
+        free(self->items[i]);
+    }
+    Array_free(self);
+}
+
+inline Hash* Hash_new(void) {
+    Hash* self = malloc(sizeof(Hash));
+    if (!self) return NULL;  // Allocation failure
+    
+    self->keys = Array_new();
+    self->values = Array_new();
+    
+    // Add hash codes array for O(1) lookups
+    if (!self->keys || !self->values) {
+        if (self->keys) Array_free(self->keys);
+        if (self->values) Array_free(self->values);
+        free(self);
+        return NULL;
+    }
+    
+    return self;
+}
+
+inline void Hash_free(Hash* self) {
+    if (!self) return;  // Null pointer check
+    
+    StringArray_free(self->keys);
+    StringArray_free(self->values);
+    free(self);
+}
+
+inline void Hash_set(Hash* self, char* key, char* value) {
+    if (!self || !key || !value) return;  // Null pointer check
+    
+    // Check if key already exists to avoid duplicates
+    int index = StringArray_indexOf(self->keys, key);
+    if (index != -1) {
+        // Replace existing value
+        free(self->values->items[index]);
+        self->values->items[index] = strdup(value);
+        return;
+    }
+    
+    Array_push(self->keys, strdup(key));
+    Array_push(self->values, strdup(value));
+}
+
+inline char* Hash_get(Hash* self, char* key) {
+    if (!self || !key) return NULL;  // Null pointer check
+    
+    int i = StringArray_indexOf(self->keys, key);
+    if (i == -1) return NULL;
+    return self->values->items[i];
+}
+
+inline Entry* Entry_new(char* path, int type) {
+    if (!path) return NULL;  // Null pointer check
+    
+    char display_name[256];
+    getDisplayName(path, display_name);
+    
+    Entry* self = malloc(sizeof(Entry));
+    if (!self) return NULL;  // Allocation failure
+    
+    self->path = strdup(path);
+    self->name = strdup(display_name);
+    
+    // Check for allocation failures
+    if (!self->path || !self->name) {
+        Entry_free(self);
+        return NULL;
+    }
+    
+    self->unique = NULL;
+    self->type = type;
+    self->alpha = 0;
+    
+    return self;
+}
+
+inline void Entry_free(Entry* self) {
+    if (!self) return;  // Null pointer check
+    
+    free(self->path);
+    free(self->name);
+    if (self->unique) free(self->unique);
+    free(self);
+}
+
+inline int EntryArray_indexOf(Array* self, char* path) {
+    if (!self || !path) return -1;  // Null pointer check
+    
+    for (int i = 0; i < self->count; i++) {
+        Entry* entry = self->items[i];
+        if (exactMatch(entry->path, path)) return i;
+    }
+    return -1;
+}
+
+inline int EntryArray_sortEntry(const void* a, const void* b) {
+    if (!a || !b) return 0;  // Null pointer check
+    
+    Entry* item1 = *(Entry**)a;
+    Entry* item2 = *(Entry**)b;
+    
+    // First sort by type, then by name
+    if (item1->type != item2->type)
+        return item1->type - item2->type;
+    
+    return strcasecmp(item1->name, item2->name);
+}
+
+inline void EntryArray_sort(Array* self) {
+    if (!self || self->count <= 1) return;  // Early return for empty or single-item arrays
+    
+    qsort(self->items, self->count, sizeof(void*), EntryArray_sortEntry);
+}
+
+inline void EntryArray_free(Array* self) {
+    if (!self) return;  // Null pointer check
+    
+    for (int i = 0; i < self->count; i++) {
+        Entry_free(self->items[i]);
+    }
+    Array_free(self);
+}

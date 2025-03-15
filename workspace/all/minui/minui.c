@@ -10,153 +10,7 @@
 #include "defines.h"
 #include "api.h"
 #include "utils.h"
-
-///////////////////////////////////////
-
-typedef struct Array {
-	int count;
-	int capacity;
-	void** items;
-} Array;
-
-static Array* Array_new(void) {
-	Array* self = malloc(sizeof(Array));
-	self->count = 0;
-	self->capacity = 8;
-	self->items = malloc(sizeof(void*) * self->capacity);
-	return self;
-}
-static void Array_push(Array* self, void* item) {
-	if (self->count>=self->capacity) {
-		self->capacity *= 2;
-		self->items = realloc(self->items, sizeof(void*) * self->capacity);
-	}
-	self->items[self->count++] = item;
-}
-static void Array_unshift(Array* self, void* item) {
-	if (self->count==0) return Array_push(self, item);
-	Array_push(self, NULL); // ensures we have enough capacity
-	for (int i=self->count-2; i>=0; i--) {
-		self->items[i+1] = self->items[i];
-	}
-	self->items[0] = item;
-}
-static void* Array_pop(Array* self) {
-	if (self->count==0) return NULL;
-	return self->items[--self->count];
-}
-static void Array_reverse(Array* self) {
-	int end = self->count-1;
-	int mid = self->count/2;
-	for (int i=0; i<mid; i++) {
-		void* item = self->items[i];
-		self->items[i] = self->items[end-i];
-		self->items[end-i] = item;
-	}
-}
-static void Array_free(Array* self) {
-	free(self->items); 
-	free(self);
-}
-
-static int StringArray_indexOf(Array* self, char* str) {
-	for (int i=0; i<self->count; i++) {
-		if (exactMatch(self->items[i], str)) return i;
-	}
-	return -1;
-}
-static void StringArray_free(Array* self) {
-	for (int i=0; i<self->count; i++) {
-		free(self->items[i]);
-	}
-	Array_free(self);
-}
-
-///////////////////////////////////////
-
-typedef struct Hash {
-	Array* keys;
-	Array* values;
-} Hash; // not really a hash
-
-static Hash* Hash_new(void) {
-	Hash* self = malloc(sizeof(Hash));
-	self->keys = Array_new();
-	self->values = Array_new();
-	return self;
-}
-static void Hash_free(Hash* self) {
-	StringArray_free(self->keys);
-	StringArray_free(self->values);
-	free(self);
-}
-static void Hash_set(Hash* self, char* key, char* value) {
-	Array_push(self->keys, strdup(key));
-	Array_push(self->values, strdup(value));
-}
-static char* Hash_get(Hash* self, char* key) {
-	int i = StringArray_indexOf(self->keys, key);
-	if (i==-1) return NULL;
-	return self->values->items[i];
-}
-
-///////////////////////////////////////
-
-enum EntryType {
-	ENTRY_DIR,
-	ENTRY_PAK,
-	ENTRY_ROM,
-};
-typedef struct Entry {
-	char* path;
-	char* name;
-	char* unique;
-	int type;
-	int alpha; // index in parent Directory's alphas Array, which points to the index of an Entry in its entries Array :sweat_smile:
-} Entry;
-
-static Entry* Entry_new(char* path, int type) {
-	char display_name[256];
-	getDisplayName(path, display_name);
-	Entry* self = malloc(sizeof(Entry));
-	self->path = strdup(path);
-	self->name = strdup(display_name);
-	self->unique = NULL;
-	self->type = type;
-	self->alpha = 0;
-	return self;
-}
-static void Entry_free(Entry* self) {
-	free(self->path);
-	free(self->name);
-	if (self->unique) free(self->unique);
-	free(self);
-}
-
-static int EntryArray_indexOf(Array* self, char* path) {
-	for (int i=0; i<self->count; i++) {
-		Entry* entry = self->items[i];
-		if (exactMatch(entry->path, path)) return i;
-	}
-	return -1;
-}
-static int EntryArray_sortEntry(const void* a, const void* b) {
-	Entry* item1 = *(Entry**)a;
-	Entry* item2 = *(Entry**)b;
-	return strcasecmp(item1->name, item2->name);
-}
-static void EntryArray_sort(Array* self) {
-	qsort(self->items, self->count, sizeof(void*), EntryArray_sortEntry);
-}
-
-static void EntryArray_free(Array* self) {
-	for (int i=0; i<self->count; i++) {
-		Entry_free(self->items[i]);
-	}
-	Array_free(self);
-}
-
-///////////////////////////////////////
+#include "konamicode.h"
 
 #define INT_ARRAY_MAX 27
 typedef struct IntArray {
@@ -431,6 +285,7 @@ static int should_resume = 0; // set to 1 on BTN_RESUME but only if can_resume==
 static int has_preview = 0;
 static int simple_mode = 0;
 static int show_switcher = 0;
+static int lockdown = 0;
 static int switcher_selected = 0;
 static char slot_path[256];
 static char preview_path[256];
@@ -645,7 +500,7 @@ static int hasRoms(char* dir_name) {
 static Array* getRoot(void) {
     Array* root = Array_new();
 
-    if (hasRecents()) Array_push(root, Entry_new(FAUX_RECENT_PATH, ENTRY_DIR));
+    if (!lockdown && hasRecents()) Array_push(root, Entry_new(FAUX_RECENT_PATH, ENTRY_DIR));
 
     Array* entries = Array_new();
     DIR* dh = opendir(ROMS_PATH);
@@ -720,7 +575,7 @@ static Array* getRoot(void) {
     }
 
     // Handle collections
-    if (hasCollections()) {
+    if (!lockdown && hasCollections()) {
         if (entries->count) {
             Array_push(root, Entry_new(COLLECTIONS_PATH, ENTRY_DIR));
         } else { // No visible systems, promote collections to root
@@ -755,11 +610,13 @@ static Array* getRoot(void) {
     Array_free(entries); // `root` now owns the entries
 
     // Add tools if applicable
-    char tools_path[256];
-    snprintf(tools_path, sizeof(tools_path), "%s/Tools/%s", SDCARD_PATH, PLATFORM);
-    if (exists(tools_path) && !simple_mode) {
-        Array_push(root, Entry_new(tools_path, ENTRY_DIR));
-    }
+    if(!lockdown) {
+		char tools_path[256];
+		snprintf(tools_path, sizeof(tools_path), "%s/Tools/%s", SDCARD_PATH, PLATFORM);
+		if (exists(tools_path) && !simple_mode) {
+			Array_push(root, Entry_new(tools_path, ENTRY_DIR));
+		}
+	}
 
     return root;
 }
@@ -1453,7 +1310,28 @@ int main (int argc, char *argv[]) {
 		was_online = is_online;
 		
 		if (show_version) {
-			if (PAD_justPressed(BTN_B) || PAD_tappedMenu(now)) {
+
+			// Listen for Konami Code
+			int buttonPressed = BTN_NONE;
+			if (PAD_justPressed(BTN_UP)) buttonPressed = BTN_UP;
+			else if (PAD_justPressed(BTN_DOWN)) buttonPressed = BTN_DOWN;
+			else if (PAD_justPressed(BTN_LEFT)) buttonPressed = BTN_LEFT;
+			else if (PAD_justPressed(BTN_RIGHT)) buttonPressed = BTN_RIGHT;
+			else if (PAD_justPressed(BTN_A)) buttonPressed = BTN_A;
+			else if (PAD_justPressed(BTN_B)) buttonPressed = BTN_B;
+			else if (PAD_justPressed(BTN_X)) buttonPressed = BTN_X;
+			else if (PAD_justPressed(BTN_Y)) buttonPressed = BTN_Y;
+			int konamiCodeIndex = KONAMI_update(now, buttonPressed);
+
+			// Konami Code Was Entered. Enable/Disable Lockdown.
+			if (konamiCodeIndex == 10) {
+				show_version = 0;
+				lockdown = !lockdown ? 1 : 0;
+				dirty = 1;
+				if (!HAS_POWER_BUTTON && !simple_mode) PWR_disableSleep();
+			
+			// If Konami Code is not in midst of being pressed, listen for other button presses.
+			} else if (PAD_tappedMenu(now) || !konamiCodeIndex && buttonPressed == BTN_B) {
 				show_version = 0;
 				dirty = 1;
 				if (!HAS_POWER_BUTTON && !simple_mode) PWR_disableSleep();
@@ -1494,6 +1372,7 @@ int main (int argc, char *argv[]) {
 				show_version = 1;
 				show_switcher = 0; // just to be sure
 				dirty = 1;
+				KONAMI_init();
 				if (!HAS_POWER_BUTTON && !simple_mode) PWR_enableSleep();
 			}
 			else if (PAD_justReleased(BTN_SELECT)) {
@@ -1724,6 +1603,10 @@ int main (int argc, char *argv[]) {
 				SDL_Surface* version_txt = TTF_RenderUTF8_Blended(font.large, release, COLOR_WHITE);
 				SDL_Surface* commit_txt = TTF_RenderUTF8_Blended(font.large, "Commit", COLOR_DARK_TEXT);
 				SDL_Surface* hash_txt = TTF_RenderUTF8_Blended(font.large, commit, COLOR_WHITE);
+				
+				// Lockdown Status.
+				SDL_Surface* lockdown_txt = TTF_RenderUTF8_Blended(font.large, "Lockdown", COLOR_DARK_TEXT);
+				SDL_Surface* lockdown_value_txt = TTF_RenderUTF8_Blended(font.large, !lockdown ? "False" : "True", COLOR_WHITE);
 				
 				SDL_Surface* key_txt = TTF_RenderUTF8_Blended(font.large, extra_key, COLOR_DARK_TEXT);
 				SDL_Surface* val_txt = TTF_RenderUTF8_Blended(font.large, extra_val, COLOR_WHITE);
