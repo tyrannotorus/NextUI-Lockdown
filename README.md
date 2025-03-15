@@ -1,3 +1,25 @@
+# NextUI Lockdown
+NextUI Lockdown aims to support all the goodness of NextUI, but with the ability to quickly lock all settings behind the konami code.
+Useful for when:
+1. You like the ultimate simple look of minui, but still want options available.
+2. You hand your retro doodad to your nephew to play at Thanksgiving and don't want him messing with settings.
+3. When you gift a retro doodad to your technically-illiterate uncle who's melted his brain with Fox News over the last 10 years and he's fully replaced you and all interaction with his family with russian bots on facebook and he can no longer recall joy in his life, including when you two played Super Mario together when you were a kid and you loved your uncle and you just want to give him that little bit of human joy back and go "Hey, do you remember Super Mario? Remember the fun we had? Remember?" Uh, purely hypothetically speaking on this one.
+
+# Roadmap : Lockdown Mode.
+  Konami Code enterable at the version screen to enable/disable lockdown. Lockdown mode should:
+  - Hide tools folder
+  - Hide Favourites
+  - Hide Collections
+  - Hide Settings in Emulator menu
+    
+# Roadmap : Single Game Mode.
+  Single Game Mode turns your Trimui Brick into a single game retro doodad, with no access to minui.
+  - Boots right into your selected game.
+  - Allow access to emulator menu for Save/Load, but hide Settings/Quit.
+  - Konami Code in Emulator menu disables lockedown and allows quitting back to minui to disable single game mode.
+ 
+Original NextUI Readme Below.
+
 # NextUI (formerly MinUI Next)
 A CFW based of MinUI with a rebuild emulation engine and tons of added features for the TrimUI Brick and Smart Pro. For other devices we recommend checking out [MinUI](https://github.com/shauninman/MinUI)
 - Fixed both screen tearing and sync stutter problems of MinUI by rebuilding the emulator engine core
