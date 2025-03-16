@@ -7,17 +7,17 @@ Useful for when:
 
 # TODO : Lockdown Mode.
   Konami Code enterable at the version screen to enable/disable lockdown. Lockdown mode should:
-  - Hide tools folder
-  - Hide Favourites
-  - Hide Collections
-  - Hide Settings in Emulator menu
+  - [x] Hide tools folder 
+  - [x] Hide Favourites
+  - [x] Hide Collections
+  - [ ] Hide Settings in Emulator menu
     
 # TODO : Single Game Mode.
   Single Game Mode turns your Trimui Brick into a single game retro doodad.
-  - Konami Code in emulator menu of your selected game enables single game mode.
-  - In-game emulator menu has only one option - Continue, with no access to exit to minui.
-  - Device boots directly into game when device is powered on.
-  - Konami Code again in the emulator menu disables single game mode and restores all access to minui.
+  - [ ] Konami Code in emulator menu of your selected game enables single game mode.
+  - [ ] In-game emulator menu has no options in lockdown mode. Just a pause screen.
+  - [ ]Device boots directly into game when device is powered on.
+  - [ ]Konami Code again in the emulator menu disables single game mode and restores all access to minui.
  
 Original NextUI Readme Below.
 
