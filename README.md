@@ -1,5 +1,5 @@
 # NextUI Lockdown
-NextUI Lockdown aims to support all the goodness of NextUI, but with the ability to quickly lock all settings behind the konami code.
+NextUI Lockdown aims to support all the goodness of NextUI (for the TriumUI Brick), but with the ability to quickly lock all settings with the konami code.
 Useful for when:
 1. You want an even more bare-bones minui look, but still want options/settings available when needed.
 2. You hand your retro doodad to your nephew to play at Thanksgiving and don't want him messing with settings on accident.
