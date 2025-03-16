@@ -210,6 +210,7 @@ static Directory* Directory_new(char* path, int selected) {
 	Directory_index(self);
 	return self;
 }
+
 static void Directory_free(Directory* self) {
 	free(self->path);
 	free(self->name);
@@ -284,8 +285,8 @@ static int can_resume = 0;
 static int should_resume = 0; // set to 1 on BTN_RESUME but only if can_resume==1
 static int has_preview = 0;
 static int simple_mode = 0;
-static int show_switcher = 0;
-static int lockdown = 0;
+static int show_switcher_screen = 0;
+static int lockdown_mode = 0;
 static int switcher_selected = 0;
 static char slot_path[256];
 static char preview_path[256];
@@ -500,7 +501,10 @@ static int hasRoms(char* dir_name) {
 static Array* getRoot(void) {
     Array* root = Array_new();
 
-    if (!lockdown && hasRecents()) Array_push(root, Entry_new(FAUX_RECENT_PATH, ENTRY_DIR));
+	// Hide recents in lockdown mode.
+    if (!lockdown_mode && hasRecents()) {
+		Array_push(root, Entry_new(FAUX_RECENT_PATH, ENTRY_DIR));
+	}
 
     Array* entries = Array_new();
     DIR* dh = opendir(ROMS_PATH);
@@ -574,8 +578,8 @@ static Array* getRoot(void) {
         }
     }
 
-    // Handle collections
-    if (!lockdown && hasCollections()) {
+    // Hide collections in lockdown mode.
+    if (!lockdown_mode && hasCollections()) {
         if (entries->count) {
             Array_push(root, Entry_new(COLLECTIONS_PATH, ENTRY_DIR));
         } else { // No visible systems, promote collections to root
@@ -609,8 +613,10 @@ static Array* getRoot(void) {
     }
     Array_free(entries); // `root` now owns the entries
 
-    // Add tools if applicable
-    if(!lockdown) {
+    // Add tools to the menu if:
+	// - Lockdown Mode is off
+	// - Tools exist in the folder.
+    if(!lockdown_mode) {
 		char tools_path[256];
 		snprintf(tools_path, sizeof(tools_path), "%s/Tools/%s", SDCARD_PATH, PLATFORM);
 		if (exists(tools_path) && !simple_mode) {
@@ -788,7 +794,8 @@ static int isConsoleDir(char* path) {
 static Array* getEntries(char* path){
 	Array* entries = Array_new();
 
-	if (isConsoleDir(path)) { // top-level console folder, might collate
+	// Top-level consoles folder.
+	if (isConsoleDir(path)) { 
 		char collated_path[256];
 		strcpy(collated_path, path);
 		char* tmp = strrchr(collated_path, '(');
@@ -1177,10 +1184,10 @@ static void loadLast(void) { // call after loading root directory
 static void Menu_init(void) {
 	stack = Array_new(); // array of open Directories
 	recents = Array_new();
-
 	openDirectory(SDCARD_PATH, 0);
 	loadLast(); // restore state when available
 }
+
 static void Menu_quit(void) {
 	RecentArray_free(recents);
 	DirectoryArray_free(stack);
@@ -1252,6 +1259,7 @@ int main (int argc, char *argv[]) {
 	if (autoResume()) return 0; // nothing to do
 	
 	simple_mode = exists(SIMPLE_MODE_PATH);
+	lockdown_mode = exists(LOCKDOWN_MODE_PATH);
 
 	LOG_info("MinUI\n");
 	InitSettings();
@@ -1266,14 +1274,14 @@ int main (int argc, char *argv[]) {
 	if (!HAS_POWER_BUTTON && !simple_mode) PWR_disableSleep();
 	// LOG_info("- power init: %lu\n", SDL_GetTicks() - main_begin);
 	
-	SDL_Surface* version = NULL;
+	SDL_Surface* version_screen = NULL;
 	SDL_Surface *preview = NULL;
 
 	Menu_init();
 	// LOG_info("- menu init: %lu\n", SDL_GetTicks() - main_begin);
 
-	show_switcher = exists(GAME_SWITCHER_PERSIST_PATH);
-	if (show_switcher) {
+	show_switcher_screen = exists(GAME_SWITCHER_PERSIST_PATH);
+	if (show_switcher_screen) {
 		// consider this "consumed", dont bring up the switcher next time we regularly exit a game
 		unlink(GAME_SWITCHER_PERSIST_PATH);
 		// todo: map recent slot to last used game
@@ -1288,7 +1296,7 @@ int main (int argc, char *argv[]) {
 
 	PAD_reset();
 	
-	int show_version = 0;
+	int show_version_screen = 0;
 	int show_setting = 0; // 1=brightness,2=volume
 	int was_online = PLAT_isOnline();
 	int had_thumb = 0;
@@ -1309,37 +1317,44 @@ int main (int argc, char *argv[]) {
 		if (was_online!=is_online) dirty = 1;
 		was_online = is_online;
 		
-		if (show_version) {
+		if (show_version_screen) {
 
-			// Listen for Konami Code
-			int buttonPressed = BTN_NONE;
-			if (PAD_justPressed(BTN_UP)) buttonPressed = BTN_UP;
-			else if (PAD_justPressed(BTN_DOWN)) buttonPressed = BTN_DOWN;
-			else if (PAD_justPressed(BTN_LEFT)) buttonPressed = BTN_LEFT;
-			else if (PAD_justPressed(BTN_RIGHT)) buttonPressed = BTN_RIGHT;
-			else if (PAD_justPressed(BTN_A)) buttonPressed = BTN_A;
-			else if (PAD_justPressed(BTN_B)) buttonPressed = BTN_B;
-			else if (PAD_justPressed(BTN_X)) buttonPressed = BTN_X;
-			else if (PAD_justPressed(BTN_Y)) buttonPressed = BTN_Y;
-			int konamiCodeIndex = KONAMI_update(now, buttonPressed);
-
-			// Konami Code Was Entered. Enable/Disable Lockdown.
-			if (konamiCodeIndex == 10) {
-				show_version = 0;
-				lockdown = !lockdown ? 1 : 0;
+			// If the Konami Code was entered, enable/disable lockdown mode.
+			int konamiCodeIndex = KONAMI_update(now);
+			if (konamiCodeIndex == KONAMI_CODE_LENGTH) {
+				show_version_screen = 0;
 				dirty = 1;
+				
+				// Turn Lockdown Mode On.
+				if(!lockdown_mode) {
+					lockdown_mode = 1;
+					FILE *file = fopen(LOCKDOWN_MODE_PATH, "w");
+					if (file) fclose(file);
+
+				// Turn Lockdown Mode Off.
+				} else {
+					lockdown_mode = 0;
+					remove(LOCKDOWN_MODE_PATH);
+				}				
+				
+				SDL_FreeSurface(version_screen);
+				version_screen = NULL;
+
+				closeDirectory();
+				openDirectory(SDCARD_PATH, 0);
 				if (!HAS_POWER_BUTTON && !simple_mode) PWR_disableSleep();
+				continue;
 			
-			// If Konami Code is not in midst of being pressed, listen for other button presses.
-			} else if (PAD_tappedMenu(now) || !konamiCodeIndex && buttonPressed == BTN_B) {
-				show_version = 0;
+			// Menu, or B button (outside of the Konami Code) closes the version screen.
+			} else if (PAD_tappedMenu(now) || !konamiCodeIndex && PAD_justPressed(BTN_B)) {
+				show_version_screen = 0;
 				dirty = 1;
 				if (!HAS_POWER_BUTTON && !simple_mode) PWR_disableSleep();
 			}
-		}
-		else if(show_switcher) {
+		
+		} else if(show_switcher_screen) {
 			if (PAD_justPressed(BTN_B) || PAD_justReleased(BTN_SELECT)) {
-				show_switcher = 0;
+				show_switcher_screen = 0;
 				switcher_selected = 0;
 				dirty = 1;
 			}
@@ -1366,19 +1381,19 @@ int main (int argc, char *argv[]) {
 					switcher_selected = recents->count - 1; // wrap
 				dirty = 1;
 			}
-		}
-		else {
+		
+		} else {
 			if (PAD_tappedMenu(now)) {
-				show_version = 1;
-				show_switcher = 0; // just to be sure
+				show_version_screen = 1;
+				show_switcher_screen = 0; // just to be sure
 				dirty = 1;
 				KONAMI_init();
 				if (!HAS_POWER_BUTTON && !simple_mode) PWR_enableSleep();
 			}
 			else if (PAD_justReleased(BTN_SELECT)) {
-				show_switcher = 1;
+				show_switcher_screen = 1;
 				switcher_selected = 0; 
-				show_version = 0; // just to be sure
+				show_version_screen = 0; // just to be sure
 				dirty = 1;
 			}
 			else if (total>0) {
@@ -1510,7 +1525,7 @@ int main (int argc, char *argv[]) {
 		// simple thumbnail support a thumbnail for a file or folder named NAME.EXT needs a corresponding /.res/NAME.EXT.png 
 		// that is no bigger than platform FIXED_HEIGHT x FIXED_HEIGHT
 		
-		if (!show_version && total > 0) {
+		if (!show_version_screen && total > 0) {
 			Entry* entry = top->entries->items[top->selected];
 		
 			char res_root[MAX_PATH];
@@ -1583,8 +1598,10 @@ int main (int argc, char *argv[]) {
 		
 		
 		int ow = GFX_blitHardwareGroup(screen, show_setting);
-		if (show_version) {
-			if (!version) {
+		if (show_version_screen) {
+			
+			// If version screen doesn't exist yet, grab it from version.txt and generate it.
+			if (!version_screen) {
 				char release[256];
 				getFile(ROOT_SYSTEM_PATH "/version.txt", release, 256);
 				
@@ -1594,64 +1611,67 @@ int main (int argc, char *argv[]) {
 				commit = strrchr(release, '\n')+1;
 				tmp = strchr(release, '\n');
 				tmp[0] = '\0';
-				
-				// TODO: not sure if I want bare PLAT_* calls here
-				char* extra_key = "Model";
-				char* extra_val = PLAT_getModel(); 
-				
-				SDL_Surface* release_txt = TTF_RenderUTF8_Blended(font.large, "Release", COLOR_DARK_TEXT);
-				SDL_Surface* version_txt = TTF_RenderUTF8_Blended(font.large, release, COLOR_WHITE);
-				SDL_Surface* commit_txt = TTF_RenderUTF8_Blended(font.large, "Commit", COLOR_DARK_TEXT);
-				SDL_Surface* hash_txt = TTF_RenderUTF8_Blended(font.large, commit, COLOR_WHITE);
-				
-				// Lockdown Status.
-				SDL_Surface* lockdown_txt = TTF_RenderUTF8_Blended(font.large, "Lockdown", COLOR_DARK_TEXT);
-				SDL_Surface* lockdown_value_txt = TTF_RenderUTF8_Blended(font.large, !lockdown ? "False" : "True", COLOR_WHITE);
-				
-				SDL_Surface* key_txt = TTF_RenderUTF8_Blended(font.large, extra_key, COLOR_DARK_TEXT);
-				SDL_Surface* val_txt = TTF_RenderUTF8_Blended(font.large, extra_val, COLOR_WHITE);
-				
-				int l_width = 0;
-				int r_width = 0;
-				
-				if (release_txt->w>l_width) l_width = release_txt->w;
-				if (commit_txt->w>l_width) l_width = commit_txt->w;
-				if (key_txt->w>l_width) l_width = commit_txt->w;
 
-				if (version_txt->w>r_width) r_width = version_txt->w;
-				if (hash_txt->w>r_width) r_width = hash_txt->w;
-				if (val_txt->w>r_width) r_width = val_txt->w;
+				int key_width = 0;
+				int val_width = 0;
 				
+				// Release.
+				SDL_Surface* release_key_txt = TTF_RenderUTF8_Blended(font.large, "Release", COLOR_DARK_TEXT);
+				SDL_Surface* release_val_txt = TTF_RenderUTF8_Blended(font.large, release, COLOR_WHITE);
+				if (release_key_txt->w > key_width) key_width = release_key_txt->w;
+				if (release_val_txt->w > val_width) val_width = release_val_txt->w;
+				
+				// Commit.				
+				SDL_Surface* commit_key_txt = TTF_RenderUTF8_Blended(font.large, "Commit", COLOR_DARK_TEXT);
+				SDL_Surface* commit_val_txt = TTF_RenderUTF8_Blended(font.large, commit, COLOR_WHITE);
+				if (commit_key_txt->w > key_width) key_width = commit_key_txt->w;
+				if (commit_val_txt->w > val_width) val_width = commit_val_txt->w;
+				
+				// Model.
+				char* model_key = "Model";
+				char* model_val = PLAT_getModel(); 
+				SDL_Surface* model_key_txt = TTF_RenderUTF8_Blended(font.large, model_key, COLOR_DARK_TEXT);
+				SDL_Surface* model_val_txt = TTF_RenderUTF8_Blended(font.large, model_val, COLOR_WHITE);
+				if (model_key_txt->w > key_width) key_width = model_key_txt->w;
+				if (model_val_txt->w > val_width) val_width = model_val_txt->w;
+
+				// Lockdown Status.
+				SDL_Surface* lockdown_key_txt = TTF_RenderUTF8_Blended(font.large, "Lockdown", COLOR_DARK_TEXT);
+				SDL_Surface* lockdown_val_txt = TTF_RenderUTF8_Blended(font.large, !lockdown_mode ? "Off" : "On", COLOR_WHITE);
+				if (lockdown_key_txt->w > key_width) key_width = lockdown_key_txt->w;
+				if (lockdown_val_txt->w > val_width) val_width = lockdown_val_txt->w;
+								
+				// Blit lines and clean up.
 				#define VERSION_LINE_HEIGHT 24
-				int x = l_width + SCALE1(8);
-				int w = x + r_width;
+				int x = key_width + SCALE1(8);
+				int w = x + val_width;
 				int h = SCALE1(VERSION_LINE_HEIGHT*4);
-				version = SDL_CreateRGBSurface(0,w,h,16,0,0,0,0);
-				
-				SDL_BlitSurface(release_txt, NULL, version, &(SDL_Rect){0, 0});
-				SDL_BlitSurface(version_txt, NULL, version, &(SDL_Rect){x,0});
-				SDL_BlitSurface(commit_txt, NULL, version, &(SDL_Rect){0,SCALE1(VERSION_LINE_HEIGHT)});
-				SDL_BlitSurface(hash_txt, NULL, version, &(SDL_Rect){x,SCALE1(VERSION_LINE_HEIGHT)});
-				
-				SDL_BlitSurface(key_txt, NULL, version, &(SDL_Rect){0,SCALE1(VERSION_LINE_HEIGHT*3)});
-				SDL_BlitSurface(val_txt, NULL, version, &(SDL_Rect){x,SCALE1(VERSION_LINE_HEIGHT*3)});
-				
-				SDL_FreeSurface(release_txt);
-				SDL_FreeSurface(version_txt);
-				SDL_FreeSurface(commit_txt);
-				SDL_FreeSurface(hash_txt);
-				SDL_FreeSurface(key_txt);
-				SDL_FreeSurface(val_txt);
+				version_screen = SDL_CreateRGBSurface(0,w,h,16,0,0,0,0);
+				SDL_BlitSurface(release_key_txt, NULL, version_screen, &(SDL_Rect){0, 0});
+				SDL_BlitSurface(release_val_txt, NULL, version_screen, &(SDL_Rect){x,0});
+				SDL_BlitSurface(commit_key_txt, NULL, version_screen, &(SDL_Rect){0,SCALE1(VERSION_LINE_HEIGHT)});
+				SDL_BlitSurface(commit_val_txt, NULL, version_screen, &(SDL_Rect){x,SCALE1(VERSION_LINE_HEIGHT)});
+				SDL_BlitSurface(model_key_txt, NULL, version_screen, &(SDL_Rect){0,SCALE1(VERSION_LINE_HEIGHT*2)});
+				SDL_BlitSurface(model_val_txt, NULL, version_screen, &(SDL_Rect){x,SCALE1(VERSION_LINE_HEIGHT*2)});
+				SDL_BlitSurface(lockdown_key_txt, NULL, version_screen, &(SDL_Rect){0,SCALE1(VERSION_LINE_HEIGHT*3)});
+				SDL_BlitSurface(lockdown_val_txt, NULL, version_screen, &(SDL_Rect){x,SCALE1(VERSION_LINE_HEIGHT*3)});
+				SDL_FreeSurface(release_key_txt);
+				SDL_FreeSurface(release_val_txt);
+				SDL_FreeSurface(commit_key_txt);
+				SDL_FreeSurface(commit_val_txt);
+				SDL_FreeSurface(model_key_txt);
+				SDL_FreeSurface(model_val_txt);
+				SDL_FreeSurface(lockdown_key_txt);
+				SDL_FreeSurface(lockdown_val_txt);
 			}
-			SDL_BlitSurface(version, NULL, screen, &(SDL_Rect){(screen->w-version->w)/2,(screen->h-version->h)/2});
+			SDL_BlitSurface(version_screen, NULL, screen, &(SDL_Rect){(screen->w-version_screen->w)/2,(screen->h-version_screen->h)/2});
 			
-			// buttons (duped and trimmed from below)
+			// Buttons (duped and trimmed from below)
 			if (show_setting && !GetHDMI()) GFX_blitHardwareHints(screen, show_setting);
 			else GFX_blitButtonGroup((char*[]){ BTN_SLEEP==BTN_POWER?"POWER":"MENU","SLEEP",  NULL }, 0, screen, 0);
-			
 			GFX_blitButtonGroup((char*[]){ "B","BACK",  NULL }, 0, screen, 1);
-		}
-		else if(show_switcher) {
+		
+		} else if(show_switcher_screen) {
 			// For all recents with resumable state (i.e. has savegame), show game switcher carousel
 
 			#define WINDOW_RADIUS 0 // TODO: this logic belongs in blitRect?
@@ -1849,12 +1869,10 @@ int main (int argc, char *argv[]) {
 			sleep(4);
 			quit = 1;
 		}
-
-
 		
 	}
 	
-	if (version) SDL_FreeSurface(version);
+	if (version_screen) SDL_FreeSurface(version_screen);
 	if (preview) SDL_FreeSurface(preview);
 	if (thumbbmp) SDL_FreeSurface(thumbbmp);
 

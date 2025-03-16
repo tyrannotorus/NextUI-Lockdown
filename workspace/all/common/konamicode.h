@@ -4,6 +4,6 @@
 #include <stdbool.h>
 
 void KONAMI_init(void);
-int KONAMI_update(unsigned long now, int buttonPressed);
+int KONAMI_update(unsigned long now);
 
 #endif

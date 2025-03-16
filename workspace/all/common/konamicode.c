@@ -1,8 +1,6 @@
 #include "defines.h"
+#include "api.h"
 #include "konamicode.h"
-
-#define KONAMI_CODE_LENGTH 10
-#define KONAMI_TIMEOUT_MS 1000 // 1 second timeout
 
 /**
  * This file allows listening for a Konami Code Sequence.
@@ -33,29 +31,34 @@ void KONAMI_init(void) {
 }
 
 /**
- * Pass in the buttonPressed.
- * Returns the index the user is within the konami code. 10 if successful.
+ * Pass in current time.
+ * Returns the index the user is within the konami code.
+ * Zero if user has made an error, buffer time has elapsed, or button press is not recognized in konami code.
+ * KONAMI_CODE_LENGTH if successful.
  */
-int KONAMI_update(unsigned long now, int buttonPressed) {
+int KONAMI_update(unsigned long now) {
 
     unsigned long timeSinceLastInput = now - lastKonamiInputTime;
-    
+
     if (konamiCodeIndex > 0 && timeSinceLastInput > KONAMI_TIMEOUT_MS) {
         konamiCodeIndex = 0;
     }
+
+    int buttonPressed = BTN_NONE;
+    if (PAD_justPressed(BTN_UP)) buttonPressed = BTN_UP;
+    else if (PAD_justPressed(BTN_DOWN)) buttonPressed = BTN_DOWN;
+    else if (PAD_justPressed(BTN_LEFT)) buttonPressed = BTN_LEFT;
+    else if (PAD_justPressed(BTN_RIGHT)) buttonPressed = BTN_RIGHT;
+    else if (PAD_justPressed(BTN_A)) buttonPressed = BTN_A;
+    else if (PAD_justPressed(BTN_B)) buttonPressed = BTN_B;
     
     if (buttonPressed == konamiSequence[konamiCodeIndex]) {
         konamiCodeIndex++;
         lastKonamiInputTime = now;
-        
         if (konamiCodeIndex >= KONAMI_CODE_LENGTH) {
             konamiCodeIndex = 0;
-            return 10;
+            return KONAMI_CODE_LENGTH;
         }
-    } 
-
-    else if (buttonPressed != BTN_NONE) {
-        konamiCodeIndex = 0;
     }
     
     return konamiCodeIndex;

@@ -23,6 +23,7 @@
 #define BIN_PATH SYSTEM_PATH "/bin"
 #define RECENT_PATH SHARED_USERDATA_PATH "/.minui/recent.txt"
 #define SIMPLE_MODE_PATH SHARED_USERDATA_PATH "/enable-simple-mode"
+#define LOCKDOWN_MODE_PATH SHARED_USERDATA_PATH "/lockdown-mode"
 #define AUTO_RESUME_PATH SHARED_USERDATA_PATH "/.minui/auto_resume.txt"
 #define AUTO_RESUME_SLOT 9
 #define GAME_SWITCHER_PERSIST_PATH SHARED_USERDATA_PATH "/.minui/game_switcher.txt"
@@ -50,6 +51,9 @@
 #define COLOR_LIGHT_TEXT	(SDL_Color){TRIAD_LIGHT_TEXT}
 #define COLOR_DARK_TEXT		(SDL_Color){TRIAD_DARK_TEXT}
 #define COLOR_BUTTON_TEXT	(SDL_Color){TRIAD_GRAY}
+
+#define KONAMI_CODE_LENGTH 10
+#define KONAMI_TIMEOUT_MS 1000 // 1 second timeout
 
 // all before scale
 #define PILL_SIZE 30
