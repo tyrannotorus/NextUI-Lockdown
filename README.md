@@ -7,7 +7,7 @@ Useful for when:
 
 # TODO : Lockdown Mode.
   Konami Code enterable at the version screen to enable/disable lockdown. Lockdown mode should:
-  - [x] Hide tools folder 
+  - [x] Hide Tools folder 
   - [x] Hide Favourites
   - [x] Hide Collections
   - [ ] Hide Settings in Emulator menu
