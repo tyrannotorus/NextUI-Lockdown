@@ -21,11 +21,11 @@ SDL?=SDL
 
 TARGET = minui
 INCDIR = -I. -I../common/ -I../../$(PLATFORM)/platform/
-SOURCE = $(TARGET).c ../common/scaler.c ../common/utils.c ../common/api.c ../../$(PLATFORM)/platform/platform.c
+SOURCE = $(TARGET).c ../common/scaler.c ../common/utils.c ../common/konamicode.c ../common/api.c ../../$(PLATFORM)/platform/platform.c
 
 CC = $(CROSS_COMPILE)gcc
 CFLAGS   = $(ARCH) -fomit-frame-pointer
-CFLAGS  += $(INCDIR) -DPLATFORM=\"$(PLATFORM)\" -DUSE_$(SDL) -Ofast -std=gnu99
+CFLAGS  += $(INCDIR) -I/usr/include/ -DPLATFORM=\"$(PLATFORM)\" -DUSE_$(SDL) -Ofast -std=gnu99
 LDFLAGS	 = -ldl -lmsettings $(LIBS) -l$(SDL) -l$(SDL)_image -l$(SDL)_ttf -lpthread -lm -lz
 
 PRODUCT= build/$(PLATFORM)/$(TARGET).elf

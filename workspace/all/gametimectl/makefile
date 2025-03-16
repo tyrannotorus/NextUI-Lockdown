@@ -25,6 +25,7 @@ SOURCE = $(TARGET).c ../common/utils.c ../common/api.c ../common/scaler.c ../../
 
 CC = $(CROSS_COMPILE)gcc
 CFLAGS   = $(ARCH) -fomit-frame-pointer
+CFLAGS  += -I/usr/include
 CFLAGS  += $(INCDIR) -DPLATFORM=\"$(PLATFORM)\" -DUSE_$(SDL)  -Ofast 
 LDFLAGS	 = -ldl $(LIBS) -l$(SDL) -l$(SDL)_image -l$(SDL)_ttf -lpthread -lsqlite3 -lm -lz
 LDFLAGS +=  -lmsettings -lgametimedb
