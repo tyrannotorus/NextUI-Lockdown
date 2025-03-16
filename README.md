@@ -5,7 +5,7 @@ Useful for when:
 2. You hand your retro doodad to your nephew to play at Thanksgiving and don't want him messing with settings on accident.
 3. When you gift a retro doodad to your technically-illiterate uncle who's melted his brain with Fox News over the last 10 years and he's fully replaced you and all interaction with his family with russian bots on facebook and he can no longer recall joy in his life, including when you two played Super Mario together when you were a kid and you loved your uncle and you just want to give him that little bit of human joy back and go "Hey, do you remember Super Mario? Remember the fun we had? Remember?" Uh, purely hypothetically speaking on this one.
 
-# TODO : Lockdown Mode.
+# In Progress : Lockdown Mode.
   Konami Code enterable at the version screen to enable/disable lockdown. Lockdown mode should:
   - [x] Hide Tools folder 
   - [x] Hide Favourites
