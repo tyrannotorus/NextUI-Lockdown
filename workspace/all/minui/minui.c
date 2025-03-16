@@ -284,8 +284,8 @@ static int quit = 0;
 static int can_resume = 0;
 static int should_resume = 0; // set to 1 on BTN_RESUME but only if can_resume==1
 static int has_preview = 0;
-static int simple_mode = 0;
 static int show_switcher_screen = 0;
+static int show_version_screen = 0;
 static int lockdown_mode = 0;
 static int switcher_selected = 0;
 static char slot_path[256];
@@ -619,7 +619,7 @@ static Array* getRoot(void) {
     if(!lockdown_mode) {
 		char tools_path[256];
 		snprintf(tools_path, sizeof(tools_path), "%s/Tools/%s", SDCARD_PATH, PLATFORM);
-		if (exists(tools_path) && !simple_mode) {
+		if (exists(tools_path)) {
 			Array_push(root, Entry_new(tools_path, ENTRY_DIR));
 		}
 	}
@@ -1259,7 +1259,6 @@ int main (int argc, char *argv[]) {
 	
 	if (autoResume()) return 0; // nothing to do
 	
-	simple_mode = exists(SIMPLE_MODE_PATH);
 	lockdown_mode = exists(LOCKDOWN_MODE_PATH);
 
 	LOG_info("MinUI\n");
@@ -1272,7 +1271,7 @@ int main (int argc, char *argv[]) {
 	// LOG_info("- input init: %lu\n", SDL_GetTicks() - main_begin);
 	
 	PWR_init();
-	if (!HAS_POWER_BUTTON && !simple_mode) PWR_disableSleep();
+	if (!HAS_POWER_BUTTON) PWR_disableSleep();
 	// LOG_info("- power init: %lu\n", SDL_GetTicks() - main_begin);
 	
 	SDL_Surface* version_screen = NULL;
@@ -1297,7 +1296,6 @@ int main (int argc, char *argv[]) {
 
 	PAD_reset();
 	
-	int show_version_screen = 0;
 	int show_setting = 0; // 1=brightness,2=volume
 	int was_online = PLAT_isOnline();
 	int had_thumb = 0;
@@ -1347,14 +1345,14 @@ int main (int argc, char *argv[]) {
 
 				closeDirectory();
 				openDirectory(SDCARD_PATH, 0);
-				if (!HAS_POWER_BUTTON && !simple_mode) PWR_disableSleep();
+				if (!HAS_POWER_BUTTON) PWR_disableSleep();
 				continue;
 			
 			// Menu, or B button (outside of the Konami Code) closes the version screen.
 			} else if (PAD_tappedMenu(now) || !konamiCodeIndex && PAD_justPressed(BTN_B)) {
 				show_version_screen = 0;
 				dirty = 1;
-				if (!HAS_POWER_BUTTON && !simple_mode) PWR_disableSleep();
+				if (!HAS_POWER_BUTTON) PWR_disableSleep();
 			}
 		
 		} else if(show_switcher_screen) {
@@ -1393,7 +1391,7 @@ int main (int argc, char *argv[]) {
 				show_switcher_screen = 0; // just to be sure
 				dirty = 1;
 				KONAMI_init();
-				if (!HAS_POWER_BUTTON && !simple_mode) PWR_enableSleep();
+				if (!HAS_POWER_BUTTON) PWR_enableSleep();
 			}
 			else if (PAD_justReleased(BTN_SELECT)) {
 				show_switcher_screen = 1;
@@ -1676,7 +1674,7 @@ int main (int argc, char *argv[]) {
 				
 				GFX_blitButtonGroup((char*[]){ "B","BACK",  NULL }, 0, screen, 1);
 			}
-			else if(show_switcher) {
+			else if(show_switcher_screen) {
 				// For all recents with resumable state (i.e. has savegame), show game switcher carousel
 
 				#define WINDOW_RADIUS 0 // TODO: this logic belongs in blitRect?
@@ -1863,7 +1861,7 @@ int main (int argc, char *argv[]) {
 				else if (can_resume) GFX_blitButtonGroup((char*[]){ "X","RESUME",  NULL }, 0, screen, 0);
 				else GFX_blitButtonGroup((char*[]){ 
 					BTN_SLEEP==BTN_POWER?"POWER":"MENU",
-					BTN_SLEEP==BTN_POWER||simple_mode?"SLEEP":"INFO",  
+					BTN_SLEEP==BTN_POWER?"SLEEP":"INFO",  
 					NULL }, 0, screen, 0);
 			
 				if (total==0) {
@@ -1884,7 +1882,7 @@ int main (int argc, char *argv[]) {
 			GFX_flip(screen);
 			dirty = 0;
 		} else {
-			if(!show_switcher && !show_version_screen) {
+			if(!show_switcher_screen && !show_version_screen) {
 			// nondirty
 			int ox = (int)(screen->w * 0.5);
 			Entry* entry = top->entries->items[top->selected];
