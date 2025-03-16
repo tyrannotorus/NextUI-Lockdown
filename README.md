@@ -16,8 +16,8 @@ Useful for when:
   Single Game Mode turns your Trimui Brick into a single game retro doodad.
   - [ ] Konami Code in emulator menu of your selected game enables single game mode.
   - [ ] In-game emulator menu has no options in lockdown mode. Just a pause screen.
-  - [ ]Device boots directly into game when device is powered on.
-  - [ ]Konami Code again in the emulator menu disables single game mode and restores all access to minui.
+  - [ ] Device boots directly into game when device is powered on.
+  - [ ] Konami Code again in the emulator menu disables single game mode and restores all access to minui.
  
 Original NextUI Readme Below.
 
