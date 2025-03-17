@@ -24,7 +24,6 @@
 static SDL_Surface* screen;
 static int quit = 0;
 static int show_menu = 0;
-static int simple_mode = 0;
 static int thread_video = 0;
 static int was_threaded = 0;
 static int should_run_core = 1; // used by threaded video
@@ -3215,8 +3214,6 @@ void Menu_init(void) {
 
 	sprintf(menu.slot_path, "%s/%s.txt", menu.minui_dir, game.name);
 	
-	if (simple_mode) menu.items[ITEM_OPTS] = "Reset";
-	
 	if (game.m3u_path[0]) {
 		char* tmp;
 		strcpy(menu.base_path, game.m3u_path);
@@ -4510,27 +4507,20 @@ static void Menu_loop(void) {
 				}
 				break;
 				case ITEM_OPTS: {
-					if (simple_mode) {
-						core.reset();
-						status = STATUS_RESET;
-						show_menu = 0;
+					int old_scaling = screen_scaling;
+					Menu_options(&options_menu);
+					if (screen_scaling!=old_scaling) {
+						selectScaler(renderer.true_w,renderer.true_h,renderer.src_p);
+					
+						restore_w = screen->w;
+						restore_h = screen->h;
+						restore_p = screen->pitch;
+						screen = GFX_resize(DEVICE_WIDTH,DEVICE_HEIGHT,DEVICE_PITCH);
+					
+						SDL_FillRect(backing, NULL, 0);
+						Menu_scale(menu.bitmap, backing);
 					}
-					else {
-						int old_scaling = screen_scaling;
-						Menu_options(&options_menu);
-						if (screen_scaling!=old_scaling) {
-							selectScaler(renderer.true_w,renderer.true_h,renderer.src_p);
-						
-							restore_w = screen->w;
-							restore_h = screen->h;
-							restore_p = screen->pitch;
-							screen = GFX_resize(DEVICE_WIDTH,DEVICE_HEIGHT,DEVICE_PITCH);
-						
-							SDL_FillRect(backing, NULL, 0);
-							Menu_scale(menu.bitmap, backing);
-						}
-						dirty = 1;
-					}
+					dirty = 1;
 				}
 				break;
 				case ITEM_QUIT:
@@ -4857,9 +4847,7 @@ int main(int argc , char* argv[]) {
 	Game_open(rom_path); // nes tries to load gamegenie setting before this returns ffs
 	if (!game.is_open) goto finish;
 	
-	simple_mode = exists(SIMPLE_MODE_PATH);
-	
-	// restore options
+    // restore options
 	Config_load(); // before init?
 	Config_init();
 	Config_readOptions(); // cores with boot logo option (eg. gb) need to load options early

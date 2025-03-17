@@ -286,7 +286,7 @@ static int should_resume = 0; // set to 1 on BTN_RESUME but only if can_resume==
 static int has_preview = 0;
 static int show_switcher_screen = 0;
 static int show_version_screen = 0;
-static int lockdown_mode = 0;
+static int simple_mode = 0;
 static int switcher_selected = 0;
 static char slot_path[256];
 static char preview_path[256];
@@ -501,8 +501,8 @@ static int hasRoms(char* dir_name) {
 static Array* getRoot(void) {
     Array* root = Array_new();
 
-	// Hide recents in lockdown mode.
-    if (!lockdown_mode && hasRecents()) {
+	// Hide recents in Simple Mode.
+    if (!simple_mode && hasRecents()) {
 		Array_push(root, Entry_new(FAUX_RECENT_PATH, ENTRY_DIR));
 	}
 
@@ -578,8 +578,8 @@ static Array* getRoot(void) {
         }
     }
 
-    // Hide collections in lockdown mode.
-    if (!lockdown_mode && hasCollections()) {
+    // Hide collections in Simple Mode.
+    if (!simple_mode && hasCollections()) {
         if (entries->count) {
             Array_push(root, Entry_new(COLLECTIONS_PATH, ENTRY_DIR));
         } else { // No visible systems, promote collections to root
@@ -614,9 +614,9 @@ static Array* getRoot(void) {
     Array_free(entries); // `root` now owns the entries
 
     // Add tools to the menu if:
-	// - Lockdown Mode is off
+	// - Simple Mode Mode is off
 	// - Tools exist in the folder.
-    if(!lockdown_mode) {
+    if(!simple_mode) {
 		char tools_path[256];
 		snprintf(tools_path, sizeof(tools_path), "%s/Tools/%s", SDCARD_PATH, PLATFORM);
 		if (exists(tools_path)) {
@@ -1259,7 +1259,7 @@ int main (int argc, char *argv[]) {
 	
 	if (autoResume()) return 0; // nothing to do
 	
-	lockdown_mode = exists(LOCKDOWN_MODE_PATH);
+	simple_mode = exists(SIMPLE_MODE_PATH);
 
 	LOG_info("MinUI\n");
 	InitSettings();
@@ -1322,29 +1322,29 @@ int main (int argc, char *argv[]) {
 		
 		if (show_version_screen) {
 
-			// If the Konami Code was entered, enable/disable lockdown mode.
+			// If the Konami Code was entered, enable/disable Simple Mode.
 			int konamiCodeIndex = KONAMI_update(now);
 			if (konamiCodeIndex == KONAMI_CODE_LENGTH) {
-				show_version_screen = 0;
+				//show_version_screen = 0;
 				dirty = 1;
 				
-				// Turn Lockdown Mode On.
-				if(!lockdown_mode) {
-					lockdown_mode = 1;
-					FILE *file = fopen(LOCKDOWN_MODE_PATH, "w");
+				// Turn Simple Mode Mode On.
+				if(!simple_mode) {
+					simple_mode = 1;
+					FILE *file = fopen(SIMPLE_MODE_PATH, "w");
 					if (file) fclose(file);
 
-				// Turn Lockdown Mode Off.
+				// Turn Simple Mode Mode Off.
 				} else {
-					lockdown_mode = 0;
-					remove(LOCKDOWN_MODE_PATH);
+					simple_mode = 0;
+					remove(SIMPLE_MODE_PATH);
 				}				
 				
 				SDL_FreeSurface(version_screen);
 				version_screen = NULL;
 
-				closeDirectory();
-				openDirectory(SDCARD_PATH, 0);
+				//closeDirectory();
+				//openDirectory(SDCARD_PATH, 0);
 				if (!HAS_POWER_BUTTON) PWR_disableSleep();
 				continue;
 			
@@ -1670,9 +1670,9 @@ int main (int argc, char *argv[]) {
 					if (model_key_txt->w > key_width) key_width = model_key_txt->w;
 					if (model_val_txt->w > val_width) val_width = model_val_txt->w;
 
-					// Lockdown Status.
-					SDL_Surface* lockdown_key_txt = TTF_RenderUTF8_Blended(font.large, "Lockdown", COLOR_DARK_TEXT);
-					SDL_Surface* lockdown_val_txt = TTF_RenderUTF8_Blended(font.large, !lockdown_mode ? "Off" : "On", COLOR_WHITE);
+					// Simple Mode Status.
+					SDL_Surface* lockdown_key_txt = TTF_RenderUTF8_Blended(font.large, "Simple Mode", COLOR_DARK_TEXT);
+					SDL_Surface* lockdown_val_txt = TTF_RenderUTF8_Blended(font.large, !simple_mode ? "Off" : "On", COLOR_WHITE);
 					if (lockdown_key_txt->w > key_width) key_width = lockdown_key_txt->w;
 					if (lockdown_val_txt->w > val_width) val_width = lockdown_val_txt->w;
 									
