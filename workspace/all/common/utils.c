@@ -452,6 +452,25 @@ uint64_t getMicroseconds(void) {
     return ret;
 }
 
+#define max(a,b)             \
+({                           \
+    __typeof__ (a) _a = (a); \
+    __typeof__ (b) _b = (b); \
+    _a > _b ? _a : _b;       \
+})
+
+#define min(a,b)             \
+({                           \
+    __typeof__ (a) _a = (a); \
+    __typeof__ (b) _b = (b); \
+    _a < _b ? _a : _b;       \
+})
+
+int clamp(int x, int lower, int upper)
+{
+    return min(upper, max(x, lower));
+}
+
 inline Array* Array_new(void) {
     Array* self = malloc(sizeof(Array));
     if (!self) return NULL;  // Allocation failure
