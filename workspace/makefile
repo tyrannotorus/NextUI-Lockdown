@@ -29,6 +29,7 @@ all:
 	cd ./all/gametimectl/ && make
 	cd ./all/syncsettings/ && make
 	cd ./all/settings/ && make
+	cd ./all/minput/ && make
 	cd ./all/ledcontrol/ && make
 # BUILDOPTION: don't forget to uncomment this to rebuild cores from  source, idk if this was left commented by mistake, but I actually agree on leaving this commented out by default as they take a long while to build and only really need building if someone bothered to pull the repo's manually and there are actually updates to any core worth including in new MinUI Next releases.
 # cd ./$(PLATFORM)/cores && make
