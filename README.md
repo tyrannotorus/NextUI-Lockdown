@@ -11,6 +11,8 @@ Useful for when:
   - [x] Hide Favourites
   - [x] Hide Collections
   - [ ] Hide Settings in Emulator menu
+
+![Screenshot from 2025-03-19 15-13-43](https://github.com/user-attachments/assets/f73dfbd3-8b54-4a01-ac9d-55f41cf9d001)
     
 # TODO : Single Game Mode.
   Single Game Mode turns your Trimui Brick into a single game retro doodad.
