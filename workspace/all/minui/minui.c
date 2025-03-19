@@ -1326,16 +1326,14 @@ int main (int argc, char *argv[]) {
 			// If the Konami Code was entered, enable/disable Simple Mode.
 			int konamiCodeIndex = KONAMI_update(now);
 			if (konamiCodeIndex == KONAMI_CODE_LENGTH) {
-				//show_version_screen = 0;
-				dirty = 1;
-				
-				// Turn Simple Mode Mode On.
+								
+				// Turn Simple Mode On.
 				if(!simple_mode) {
 					simple_mode = 1;
 					FILE *file = fopen(SIMPLE_MODE_PATH, "w");
 					if (file) fclose(file);
 
-				// Turn Simple Mode Mode Off.
+				// Turn Simple Mode Off.
 				} else {
 					simple_mode = 0;
 					remove(SIMPLE_MODE_PATH);
@@ -1344,8 +1342,17 @@ int main (int argc, char *argv[]) {
 				SDL_FreeSurface(version_screen);
 				version_screen = NULL;
 
-				//closeDirectory();
-				//openDirectory(SDCARD_PATH, 0);
+				// Ensure the directory list is rebuilt.
+				restore_selected = 0;
+				restore_start = 0;
+				restore_end = 0;
+				top = NULL;
+				DirectoryArray_free(stack);
+				stack = Array_new();
+				openDirectory(SDCARD_PATH, 0);
+
+				dirty = 1;
+				
 				if (!HAS_POWER_BUTTON) PWR_disableSleep();
 				continue;
 			
@@ -1659,16 +1666,14 @@ int main (int argc, char *argv[]) {
 					if (commit_val_txt->w > val_width) val_width = commit_val_txt->w;
 					
 					// Model.
-					char* model_key = "Model";
-					char* model_val = PLAT_getModel(); 
-					SDL_Surface* model_key_txt = TTF_RenderUTF8_Blended(font.large, model_key, COLOR_DARK_TEXT);
-					SDL_Surface* model_val_txt = TTF_RenderUTF8_Blended(font.large, model_val, COLOR_WHITE);
+					SDL_Surface* model_key_txt = TTF_RenderUTF8_Blended(font.large, "Model", COLOR_DARK_TEXT);
+					SDL_Surface* model_val_txt = TTF_RenderUTF8_Blended(font.large, PLAT_getModel(), COLOR_WHITE);
 					if (model_key_txt->w > key_width) key_width = model_key_txt->w;
 					if (model_val_txt->w > val_width) val_width = model_val_txt->w;
 
 					// Simple Mode Status.
 					SDL_Surface* lockdown_key_txt = TTF_RenderUTF8_Blended(font.large, "Simple Mode", COLOR_DARK_TEXT);
-					SDL_Surface* lockdown_val_txt = TTF_RenderUTF8_Blended(font.large, !simple_mode ? "Off" : "On", COLOR_WHITE);
+					SDL_Surface* lockdown_val_txt = TTF_RenderUTF8_Blended(font.large, !simple_mode ? "Off" : "On", !simple_mode ? COLOR_WHITE : COLOR_GOLD);
 					if (lockdown_key_txt->w > key_width) key_width = lockdown_key_txt->w;
 					if (lockdown_val_txt->w > val_width) val_width = lockdown_val_txt->w;
 									
