@@ -284,9 +284,9 @@ static int quit = 0;
 static int can_resume = 0;
 static int should_resume = 0; // set to 1 on BTN_RESUME but only if can_resume==1
 static int has_preview = 0;
-static int simple_mode = 0;
 static int show_switcher_screen = 0;
-static int lockdown_mode = 0;
+static int show_version_screen = 0;
+static int simple_mode = 0;
 static int switcher_selected = 0;
 static char slot_path[256];
 static char preview_path[256];
@@ -501,8 +501,8 @@ static int hasRoms(char* dir_name) {
 static Array* getRoot(void) {
     Array* root = Array_new();
 
-	// Hide recents in lockdown mode.
-    if (!lockdown_mode && hasRecents()) {
+	// Hide recents in Simple Mode.
+    if (!simple_mode && hasRecents()) {
 		Array_push(root, Entry_new(FAUX_RECENT_PATH, ENTRY_DIR));
 	}
 
@@ -578,8 +578,8 @@ static Array* getRoot(void) {
         }
     }
 
-    // Hide collections in lockdown mode.
-    if (!lockdown_mode && hasCollections()) {
+    // Hide collections in Simple Mode.
+    if (!simple_mode && hasCollections()) {
         if (entries->count) {
             Array_push(root, Entry_new(COLLECTIONS_PATH, ENTRY_DIR));
         } else { // No visible systems, promote collections to root
@@ -614,12 +614,12 @@ static Array* getRoot(void) {
     Array_free(entries); // `root` now owns the entries
 
     // Add tools to the menu if:
-	// - Lockdown Mode is off
+	// - Simple Mode Mode is off
 	// - Tools exist in the folder.
-    if(!lockdown_mode) {
+    if(!simple_mode) {
 		char tools_path[256];
 		snprintf(tools_path, sizeof(tools_path), "%s/Tools/%s", SDCARD_PATH, PLATFORM);
-		if (exists(tools_path) && !simple_mode) {
+		if (exists(tools_path)) {
 			Array_push(root, Entry_new(tools_path, ENTRY_DIR));
 		}
 	}
@@ -1225,6 +1225,7 @@ static int previous_selected = -1;
 static int dirty = 1;
 static int dirtyanim = 1;
 static int last_selection = -1;
+static int remember_selection = 0;
 // functionooos for like animation haha
 float lerp(float a, float b, float t) {
     return a + (b - a) * t;
@@ -1238,8 +1239,8 @@ void updateSelectionAnimation(int selected) {
 		previous_selected = selected;
 	}
 		
-    if (selection_offset < 1.0f) {
-        selection_offset += 0.4f; 
+    if (selection_offset <= 1.0f) {
+        selection_offset += 0.35f; 
         if (selection_offset >= 1.0f) {
             selection_offset = 1.0f;
             previous_selected = selected;
@@ -1259,7 +1260,6 @@ int main (int argc, char *argv[]) {
 	if (autoResume()) return 0; // nothing to do
 	
 	simple_mode = exists(SIMPLE_MODE_PATH);
-	lockdown_mode = exists(LOCKDOWN_MODE_PATH);
 
 	LOG_info("MinUI\n");
 	InitSettings();
@@ -1271,7 +1271,7 @@ int main (int argc, char *argv[]) {
 	// LOG_info("- input init: %lu\n", SDL_GetTicks() - main_begin);
 	
 	PWR_init();
-	if (!HAS_POWER_BUTTON && !simple_mode) PWR_disableSleep();
+	if (!HAS_POWER_BUTTON) PWR_disableSleep();
 	// LOG_info("- power init: %lu\n", SDL_GetTicks() - main_begin);
 	
 	SDL_Surface* version_screen = NULL;
@@ -1296,12 +1296,16 @@ int main (int argc, char *argv[]) {
 
 	PAD_reset();
 	
-	int show_version_screen = 0;
 	int show_setting = 0; // 1=brightness,2=volume
 	int was_online = PLAT_isOnline();
 	int had_thumb = 0;
+	int selected_row = top->selected - top->start;
+	float targetY;
+	float previousY;
+	float highlightY;
 	SDL_Surface* thumbbmp;
-
+	int ox;
+	int oy;
 	while (!quit) {
 		GFX_startFrame();
 		unsigned long now = SDL_GetTicks();
@@ -1319,37 +1323,44 @@ int main (int argc, char *argv[]) {
 		
 		if (show_version_screen) {
 
-			// If the Konami Code was entered, enable/disable lockdown mode.
+			// If the Konami Code was entered, enable/disable Simple Mode.
 			int konamiCodeIndex = KONAMI_update(now);
 			if (konamiCodeIndex == KONAMI_CODE_LENGTH) {
-				show_version_screen = 0;
-				dirty = 1;
-				
-				// Turn Lockdown Mode On.
-				if(!lockdown_mode) {
-					lockdown_mode = 1;
-					FILE *file = fopen(LOCKDOWN_MODE_PATH, "w");
+								
+				// Turn Simple Mode On.
+				if(!simple_mode) {
+					simple_mode = 1;
+					FILE *file = fopen(SIMPLE_MODE_PATH, "w");
 					if (file) fclose(file);
 
-				// Turn Lockdown Mode Off.
+				// Turn Simple Mode Off.
 				} else {
-					lockdown_mode = 0;
-					remove(LOCKDOWN_MODE_PATH);
+					simple_mode = 0;
+					remove(SIMPLE_MODE_PATH);
 				}				
 				
 				SDL_FreeSurface(version_screen);
 				version_screen = NULL;
 
-				closeDirectory();
+				// Ensure the directory list is rebuilt.
+				restore_selected = 0;
+				restore_start = 0;
+				restore_end = 0;
+				top = NULL;
+				DirectoryArray_free(stack);
+				stack = Array_new();
 				openDirectory(SDCARD_PATH, 0);
-				if (!HAS_POWER_BUTTON && !simple_mode) PWR_disableSleep();
+
+				dirty = 1;
+				
+				if (!HAS_POWER_BUTTON) PWR_disableSleep();
 				continue;
 			
 			// Menu, or B button (outside of the Konami Code) closes the version screen.
 			} else if (PAD_tappedMenu(now) || !konamiCodeIndex && PAD_justPressed(BTN_B)) {
 				show_version_screen = 0;
 				dirty = 1;
-				if (!HAS_POWER_BUTTON && !simple_mode) PWR_disableSleep();
+				if (!HAS_POWER_BUTTON) PWR_disableSleep();
 			}
 		
 		} else if(show_switcher_screen) {
@@ -1381,14 +1392,14 @@ int main (int argc, char *argv[]) {
 					switcher_selected = recents->count - 1; // wrap
 				dirty = 1;
 			}
-		
-		} else {
+		}
+		else if(!dirtyanim) {
 			if (PAD_tappedMenu(now)) {
 				show_version_screen = 1;
 				show_switcher_screen = 0; // just to be sure
 				dirty = 1;
 				KONAMI_init();
-				if (!HAS_POWER_BUTTON && !simple_mode) PWR_enableSleep();
+				if (!HAS_POWER_BUTTON) PWR_enableSleep();
 			}
 			else if (PAD_justReleased(BTN_SELECT)) {
 				show_switcher_screen = 1;
@@ -1516,346 +1527,430 @@ int main (int argc, char *argv[]) {
 			}
 		}
 		
-	
-		GFX_clear(screen);
-		
-		int ox;
-		int oy;
-		
-		// simple thumbnail support a thumbnail for a file or folder named NAME.EXT needs a corresponding /.res/NAME.EXT.png 
-		// that is no bigger than platform FIXED_HEIGHT x FIXED_HEIGHT
-		
-		if (!show_version_screen && total > 0) {
-			Entry* entry = top->entries->items[top->selected];
-		
-			char res_root[MAX_PATH];
-			strncpy(res_root, entry->path, sizeof(res_root) - 1);
-			res_root[sizeof(res_root) - 1] = '\0';  
-		
-			char tmp_path[MAX_PATH];
-			strncpy(tmp_path, entry->path, sizeof(tmp_path) - 1);
-			tmp_path[sizeof(tmp_path) - 1] = '\0';
-		
-			char* res_name = strrchr(tmp_path, '/');
-			if (res_name) res_name++;
-		
-			if (dirty) {
-				char path_copy[1024];
-				strncpy(path_copy, entry->path, sizeof(path_copy) - 1);
-				path_copy[sizeof(path_copy) - 1] = '\0';
-		
-				char* tmp = strrchr(res_root, '/');
-				if (tmp) *tmp = '\0'; 
-		
-				char res_path[1024];
-				snprintf(res_path, sizeof(res_path), "%s/.res/%s.png", res_root, res_name);
-		
-				char* rompath = dirname(path_copy);
-		
-				char res_copy[1024];
-				strncpy(res_copy, res_name, sizeof(res_copy) - 1);
-				res_copy[sizeof(res_copy) - 1] = '\0';
-		
-				char* dot = strrchr(res_copy, '.');
-				if (dot) *dot = '\0'; 
-		
-				char thumbpath[1024];
-				snprintf(thumbpath, sizeof(thumbpath), "%s/.media/%s.png", rompath, res_copy);
-		
-				had_thumb = 0;
-				if (exists(thumbpath)) {
-					SDL_Surface* newThumb = IMG_Load(thumbpath);
-					if (newThumb) {
-						SDL_Surface* optimized = (newThumb->format->format == SDL_PIXELFORMAT_RGBA32) 
-												  ? newThumb 
-												  : SDL_ConvertSurfaceFormat(newThumb, SDL_PIXELFORMAT_RGBA32, 0);
-						
-						if (newThumb != optimized) {
-							SDL_FreeSurface(newThumb);
-						}
-		
-						if (optimized) {
-							if (thumbbmp) SDL_FreeSurface(thumbbmp); 
-							thumbbmp = optimized;
-							had_thumb = 1;
-							ox = (int)(screen->w * 0.5);
+		if(dirty || dirtyanim) {
+			GFX_clear(screen);
+			
+			
+			
+			// simple thumbnail support a thumbnail for a file or folder named NAME.EXT needs a corresponding /.res/NAME.EXT.png 
+			// that is no bigger than platform FIXED_HEIGHT x FIXED_HEIGHT
+			
+			if (!show_version_screen && total > 0) {
+				Entry* entry = top->entries->items[top->selected];
+			
+				char res_root[MAX_PATH];
+				strncpy(res_root, entry->path, sizeof(res_root) - 1);
+				res_root[sizeof(res_root) - 1] = '\0';  
+			
+				char tmp_path[MAX_PATH];
+				strncpy(tmp_path, entry->path, sizeof(tmp_path) - 1);
+				tmp_path[sizeof(tmp_path) - 1] = '\0';
+			
+				char* res_name = strrchr(tmp_path, '/');
+				if (res_name) res_name++;
+			
+				if (dirty) {
+					char path_copy[1024];
+					strncpy(path_copy, entry->path, sizeof(path_copy) - 1);
+					path_copy[sizeof(path_copy) - 1] = '\0';
+			
+					char* tmp = strrchr(res_root, '/');
+					if (tmp) *tmp = '\0'; 
+			
+					char res_path[1024];
+					snprintf(res_path, sizeof(res_path), "%s/.res/%s.png", res_root, res_name);
+			
+					char* rompath = dirname(path_copy);
+			
+					char res_copy[1024];
+					strncpy(res_copy, res_name, sizeof(res_copy) - 1);
+					res_copy[sizeof(res_copy) - 1] = '\0';
+			
+					char* dot = strrchr(res_copy, '.');
+					if (dot) *dot = '\0'; 
+			
+					char thumbpath[1024];
+					snprintf(thumbpath, sizeof(thumbpath), "%s/.media/%s.png", rompath, res_copy);
+			
+					had_thumb = 0;
+					if (exists(thumbpath)) {
+						SDL_Surface* newThumb = IMG_Load(thumbpath);
+						if (newThumb) {
+							SDL_Surface* optimized = (newThumb->format->format == SDL_PIXELFORMAT_RGB888) ? newThumb : SDL_ConvertSurfaceFormat(newThumb, SDL_PIXELFORMAT_RGB888, 0);
+							
+							if (newThumb != optimized) {
+								SDL_FreeSurface(newThumb);
+							}
+			
+							if (optimized) {
+								if (thumbbmp) SDL_FreeSurface(thumbbmp); 
+
+								int img_w = optimized->w;
+								int img_h = optimized->h;
+								double aspect_ratio = (double)img_h / img_w; 
+			
+								int max_w = (int)(screen->w * 0.45); 
+								int max_h = (int)(screen->h * 0.6);  
+			
+								int new_w = max_w;
+								int new_h = (int)(new_w * aspect_ratio); 
+			
+			
+								if (new_h > max_h) {
+									new_h = max_h;
+									new_w = (int)(new_h / aspect_ratio);
+								}
+			
+								SDL_Rect scale_rect = {
+									0,
+									0,
+									new_w,
+									new_h
+								};
+
+								thumbbmp = SDL_CreateRGBSurfaceWithFormat(0, scale_rect.w, scale_rect.h, 32, SDL_PIXELFORMAT_RGB888);
+								SDL_BlitScaled(optimized, NULL, thumbbmp, &scale_rect);
+								GFX_ApplyRounderCorners(thumbbmp, 20);
+								SDL_FreeSurface(optimized);
+								had_thumb = 1;
+							}
 						}
 					}
 				}
-			}
-		
-			if (had_thumb) { 
-				SDL_Rect dest_rect = {
-					(int)(screen->w * 0.51), 
-					SCALE1((3 * PADDING) + PILL_SIZE), 
-					(int)(screen->w * 0.48),
-					(int)(screen->h * 0.5)
-				};
-				GFX_ApplyRounderCorners(thumbbmp, 20);
-				SDL_BlitScaled(thumbbmp, NULL, screen, &dest_rect);
-			}
-		}
-		
-		
-		int ow = GFX_blitHardwareGroup(screen, show_setting);
-		if (show_version_screen) {
 			
-			// If version screen doesn't exist yet, grab it from version.txt and generate it.
-			if (!version_screen) {
-				char release[256];
-				getFile(ROOT_SYSTEM_PATH "/version.txt", release, 256);
+				if (had_thumb) { 
+					int target_y = (int)(screen->h * 0.48);
+					int center_y = target_y - (thumbbmp->h / 2);
+					SDL_Rect dest_rect = {
+						screen->w-(thumbbmp->w + SCALE1(BUTTON_MARGIN*3)),
+						center_y,
+						thumbbmp->w,
+						thumbbmp->h
+					};
 				
-				char *tmp,*commit;
-				commit = strrchr(release, '\n');
-				commit[0] = '\0';
-				commit = strrchr(release, '\n')+1;
-				tmp = strchr(release, '\n');
-				tmp[0] = '\0';
-
-				int key_width = 0;
-				int val_width = 0;
-				
-				// Release.
-				SDL_Surface* release_key_txt = TTF_RenderUTF8_Blended(font.large, "Release", COLOR_DARK_TEXT);
-				SDL_Surface* release_val_txt = TTF_RenderUTF8_Blended(font.large, release, COLOR_WHITE);
-				if (release_key_txt->w > key_width) key_width = release_key_txt->w;
-				if (release_val_txt->w > val_width) val_width = release_val_txt->w;
-				
-				// Commit.				
-				SDL_Surface* commit_key_txt = TTF_RenderUTF8_Blended(font.large, "Commit", COLOR_DARK_TEXT);
-				SDL_Surface* commit_val_txt = TTF_RenderUTF8_Blended(font.large, commit, COLOR_WHITE);
-				if (commit_key_txt->w > key_width) key_width = commit_key_txt->w;
-				if (commit_val_txt->w > val_width) val_width = commit_val_txt->w;
-				
-				// Model.
-				char* model_key = "Model";
-				char* model_val = PLAT_getModel(); 
-				SDL_Surface* model_key_txt = TTF_RenderUTF8_Blended(font.large, model_key, COLOR_DARK_TEXT);
-				SDL_Surface* model_val_txt = TTF_RenderUTF8_Blended(font.large, model_val, COLOR_WHITE);
-				if (model_key_txt->w > key_width) key_width = model_key_txt->w;
-				if (model_val_txt->w > val_width) val_width = model_val_txt->w;
-
-				// Lockdown Status.
-				SDL_Surface* lockdown_key_txt = TTF_RenderUTF8_Blended(font.large, "Lockdown", COLOR_DARK_TEXT);
-				SDL_Surface* lockdown_val_txt = TTF_RenderUTF8_Blended(font.large, !lockdown_mode ? "Off" : "On", COLOR_WHITE);
-				if (lockdown_key_txt->w > key_width) key_width = lockdown_key_txt->w;
-				if (lockdown_val_txt->w > val_width) val_width = lockdown_val_txt->w;
-								
-				// Blit lines and clean up.
-				#define VERSION_LINE_HEIGHT 24
-				int x = key_width + SCALE1(8);
-				int w = x + val_width;
-				int h = SCALE1(VERSION_LINE_HEIGHT*4);
-				version_screen = SDL_CreateRGBSurface(0,w,h,16,0,0,0,0);
-				SDL_BlitSurface(release_key_txt, NULL, version_screen, &(SDL_Rect){0, 0});
-				SDL_BlitSurface(release_val_txt, NULL, version_screen, &(SDL_Rect){x,0});
-				SDL_BlitSurface(commit_key_txt, NULL, version_screen, &(SDL_Rect){0,SCALE1(VERSION_LINE_HEIGHT)});
-				SDL_BlitSurface(commit_val_txt, NULL, version_screen, &(SDL_Rect){x,SCALE1(VERSION_LINE_HEIGHT)});
-				SDL_BlitSurface(model_key_txt, NULL, version_screen, &(SDL_Rect){0,SCALE1(VERSION_LINE_HEIGHT*2)});
-				SDL_BlitSurface(model_val_txt, NULL, version_screen, &(SDL_Rect){x,SCALE1(VERSION_LINE_HEIGHT*2)});
-				SDL_BlitSurface(lockdown_key_txt, NULL, version_screen, &(SDL_Rect){0,SCALE1(VERSION_LINE_HEIGHT*3)});
-				SDL_BlitSurface(lockdown_val_txt, NULL, version_screen, &(SDL_Rect){x,SCALE1(VERSION_LINE_HEIGHT*3)});
-				SDL_FreeSurface(release_key_txt);
-				SDL_FreeSurface(release_val_txt);
-				SDL_FreeSurface(commit_key_txt);
-				SDL_FreeSurface(commit_val_txt);
-				SDL_FreeSurface(model_key_txt);
-				SDL_FreeSurface(model_val_txt);
-				SDL_FreeSurface(lockdown_key_txt);
-				SDL_FreeSurface(lockdown_val_txt);
+					ox = (int)(screen->w - thumbbmp->w) - SCALE1(BUTTON_MARGIN*5);
+					SDL_BlitSurface(thumbbmp, NULL, screen, &dest_rect);
+					
+					
+				}
 			}
-			SDL_BlitSurface(version_screen, NULL, screen, &(SDL_Rect){(screen->w-version_screen->w)/2,(screen->h-version_screen->h)/2});
-			
-			// Buttons (duped and trimmed from below)
-			if (show_setting && !GetHDMI()) GFX_blitHardwareHints(screen, show_setting);
-			else GFX_blitButtonGroup((char*[]){ BTN_SLEEP==BTN_POWER?"POWER":"MENU","SLEEP",  NULL }, 0, screen, 0);
-			GFX_blitButtonGroup((char*[]){ "B","BACK",  NULL }, 0, screen, 1);
-		
-		} else if(show_switcher_screen) {
-			// For all recents with resumable state (i.e. has savegame), show game switcher carousel
+						
+			int ow = GFX_blitHardwareGroup(screen, show_setting);
+			if (show_version_screen) {
+				
+				// If version screen doesn't exist yet, grab it from version.txt and generate it.
+				if (!version_screen) {
+					char release[256];
+					getFile(ROOT_SYSTEM_PATH "/version.txt", release, 256);
+					
+					char *tmp,*commit;
+					commit = strrchr(release, '\n');
+					commit[0] = '\0';
+					commit = strrchr(release, '\n')+1;
+					tmp = strchr(release, '\n');
+					tmp[0] = '\0';
 
-			#define WINDOW_RADIUS 0 // TODO: this logic belongs in blitRect?
-			#define PAGINATION_HEIGHT 0
-			// unscaled
-			int hw = screen->w;
-			int hh = screen->h;
-			int pw = hw + SCALE1(WINDOW_RADIUS*2);
-			int ph = hh + SCALE1(WINDOW_RADIUS*2 + PAGINATION_HEIGHT + WINDOW_RADIUS);
-			ox = 0; // screen->w - pw - SCALE1(PADDING);
-			oy = 0; // (screen->h - ph) / 2;
+					int key_width = 0;
+					int val_width = 0;
+					
+					// Release.
+					SDL_Surface* release_key_txt = TTF_RenderUTF8_Blended(font.large, "Release", COLOR_DARK_TEXT);
+					SDL_Surface* release_val_txt = TTF_RenderUTF8_Blended(font.large, release, COLOR_WHITE);
+					if (release_key_txt->w > key_width) key_width = release_key_txt->w;
+					if (release_val_txt->w > val_width) val_width = release_val_txt->w;
+					
+					// Commit.				
+					SDL_Surface* commit_key_txt = TTF_RenderUTF8_Blended(font.large, "Commit", COLOR_DARK_TEXT);
+					SDL_Surface* commit_val_txt = TTF_RenderUTF8_Blended(font.large, commit, COLOR_WHITE);
+					if (commit_key_txt->w > key_width) key_width = commit_key_txt->w;
+					if (commit_val_txt->w > val_width) val_width = commit_val_txt->w;
+					
+					// Model.
+					SDL_Surface* model_key_txt = TTF_RenderUTF8_Blended(font.large, "Model", COLOR_DARK_TEXT);
+					SDL_Surface* model_val_txt = TTF_RenderUTF8_Blended(font.large, PLAT_getModel(), COLOR_WHITE);
+					if (model_key_txt->w > key_width) key_width = model_key_txt->w;
+					if (model_val_txt->w > val_width) val_width = model_val_txt->w;
 
-			// window
-			// GFX_blitRect(ASSET_STATE_BG, screen, &(SDL_Rect){ox,oy,pw,ph});
+					// Simple Mode Status.
+					SDL_Surface* lockdown_key_txt = TTF_RenderUTF8_Blended(font.large, "Simple Mode", COLOR_DARK_TEXT);
+					SDL_Surface* lockdown_val_txt = TTF_RenderUTF8_Blended(font.large, !simple_mode ? "Off" : "On", !simple_mode ? COLOR_WHITE : COLOR_GOLD);
+					if (lockdown_key_txt->w > key_width) key_width = lockdown_key_txt->w;
+					if (lockdown_val_txt->w > val_width) val_width = lockdown_val_txt->w;
+									
+					// Blit lines and clean up.
+					#define VERSION_LINE_HEIGHT 24
+					int x = key_width + SCALE1(8);
+					int w = x + val_width;
+					int h = SCALE1(VERSION_LINE_HEIGHT*4);
+					version_screen = SDL_CreateRGBSurface(0,w,h,16,0,0,0,0);
+					SDL_BlitSurface(release_key_txt, NULL, version_screen, &(SDL_Rect){0, 0});
+					SDL_BlitSurface(release_val_txt, NULL, version_screen, &(SDL_Rect){x,0});
+					SDL_BlitSurface(commit_key_txt, NULL, version_screen, &(SDL_Rect){0,SCALE1(VERSION_LINE_HEIGHT)});
+					SDL_BlitSurface(commit_val_txt, NULL, version_screen, &(SDL_Rect){x,SCALE1(VERSION_LINE_HEIGHT)});
+					SDL_BlitSurface(model_key_txt, NULL, version_screen, &(SDL_Rect){0,SCALE1(VERSION_LINE_HEIGHT*2)});
+					SDL_BlitSurface(model_val_txt, NULL, version_screen, &(SDL_Rect){x,SCALE1(VERSION_LINE_HEIGHT*2)});
+					SDL_BlitSurface(lockdown_key_txt, NULL, version_screen, &(SDL_Rect){0,SCALE1(VERSION_LINE_HEIGHT*3)});
+					SDL_BlitSurface(lockdown_val_txt, NULL, version_screen, &(SDL_Rect){x,SCALE1(VERSION_LINE_HEIGHT*3)});
+					SDL_FreeSurface(release_key_txt);
+					SDL_FreeSurface(release_val_txt);
+					SDL_FreeSurface(commit_key_txt);
+					SDL_FreeSurface(commit_val_txt);
+					SDL_FreeSurface(model_key_txt);
+					SDL_FreeSurface(model_val_txt);
+					SDL_FreeSurface(lockdown_key_txt);
+					SDL_FreeSurface(lockdown_val_txt);
+				}
+				SDL_BlitSurface(version_screen, NULL, screen, &(SDL_Rect){(screen->w-version_screen->w)/2,(screen->h-version_screen->h)/2});
+				
+				// buttons (duped and trimmed from below)
+				if (show_setting && !GetHDMI()) GFX_blitHardwareHints(screen, show_setting);
+				else GFX_blitButtonGroup((char*[]){ BTN_SLEEP==BTN_POWER?"POWER":"MENU","SLEEP",  NULL }, 0, screen, 0);
+				
+				GFX_blitButtonGroup((char*[]){ "B","BACK",  NULL }, 0, screen, 1);
+			}
+			else if(show_switcher_screen) {
+				// For all recents with resumable state (i.e. has savegame), show game switcher carousel
 
-			if(recents->count > 0) {
-				Entry *selectedEntry = entryFromRecent(recents->items[switcher_selected]);
-				readyResume(selectedEntry);
+				#define WINDOW_RADIUS 0 // TODO: this logic belongs in blitRect?
+				#define PAGINATION_HEIGHT 0
+				// unscaled
+				int hw = screen->w;
+				int hh = screen->h;
+				int pw = hw + SCALE1(WINDOW_RADIUS*2);
+				int ph = hh + SCALE1(WINDOW_RADIUS*2 + PAGINATION_HEIGHT + WINDOW_RADIUS);
+				ox = 0; // screen->w - pw - SCALE1(PADDING);
+				oy = 0; // (screen->h - ph) / 2;
 
-				if(has_preview) {
-					// lotta memory churn here
-					SDL_Surface* bmp = IMG_Load(preview_path);
-					SDL_Surface* raw_preview = SDL_ConvertSurfaceFormat(bmp, SDL_PIXELFORMAT_RGBA32, 0);
-					if (raw_preview) {
-						SDL_FreeSurface(bmp); 
-						bmp = raw_preview; 
+				// window
+				// GFX_blitRect(ASSET_STATE_BG, screen, &(SDL_Rect){ox,oy,pw,ph});
+
+				if(recents->count > 0) {
+					Entry *selectedEntry = entryFromRecent(recents->items[switcher_selected]);
+					readyResume(selectedEntry);
+
+					if(has_preview) {
+						// lotta memory churn here
+						SDL_Surface* bmp = IMG_Load(preview_path);
+						SDL_Surface* raw_preview = SDL_ConvertSurfaceFormat(bmp, SDL_PIXELFORMAT_RGBA32, 0);
+						if (raw_preview) {
+							SDL_FreeSurface(bmp); 
+							bmp = raw_preview; 
+						}
+						if(bmp) {
+							SDL_Surface* scaled = SDL_CreateRGBSurfaceWithFormat(0, screen->w, screen->h, 32, SDL_PIXELFORMAT_RGBA32);					
+							SDL_Rect image_rect = {0, 0, screen->w, screen->h};
+							SDL_BlitScaled(bmp, NULL, scaled, &image_rect);
+							SDL_FreeSurface(bmp);
+							GFX_ApplyRounderCorners(scaled,30);
+							SDL_BlitSurface(scaled, NULL, screen, &image_rect);
+							SDL_FreeSurface(scaled);  // Free after rendering
+						}
 					}
-					if(bmp) {
-						SDL_Surface* scaled = SDL_CreateRGBSurfaceWithFormat(0, screen->w, screen->h, 32, SDL_PIXELFORMAT_RGBA32);					
-						SDL_Rect image_rect = {0, 0, screen->w, screen->h};
-						SDL_BlitScaled(bmp, NULL, scaled, &image_rect);
-						SDL_FreeSurface(bmp);
-						GFX_ApplyRounderCorners(scaled,30);
-						SDL_BlitSurface(scaled, NULL, screen, &image_rect);
-						SDL_FreeSurface(scaled);  // Free after rendering
+					else {
+						SDL_Rect preview_rect = {ox,oy,hw,hh};
+						SDL_FillRect(screen, &preview_rect, 0);
+						GFX_blitMessage(font.large, "No Preview", screen, &preview_rect);
 					}
+
+					// title pill
+					{
+						int ow = GFX_blitHardwareGroup(screen, show_setting);
+						int max_width = screen->w - SCALE1(PADDING * 2) - ow;
+						
+						char display_name[256];
+						int text_width = GFX_truncateText(font.large, selectedEntry->name, display_name, max_width, SCALE1(BUTTON_PADDING*2));
+						max_width = MIN(max_width, text_width);
+
+						SDL_Surface* text;
+						text = TTF_RenderUTF8_Blended(font.large, display_name, COLOR_WHITE);
+						GFX_blitPillLight(ASSET_WHITE_PILL, screen, &(SDL_Rect){
+							SCALE1(PADDING),
+							SCALE1(PADDING),
+							max_width,
+							SCALE1(PILL_SIZE)
+						});
+						SDL_BlitSurface(text, &(SDL_Rect){
+							0,
+							0,
+							max_width-SCALE1(BUTTON_PADDING*2),
+							text->h
+						}, screen, &(SDL_Rect){
+							SCALE1(PADDING+BUTTON_PADDING),
+							SCALE1(PADDING+4)
+						});
+						SDL_FreeSurface(text);
+					}
+
+					// pagination
+					{
+
+					}
+
+					if(can_resume) GFX_blitButtonGroup((char*[]){ "B","BACK",  NULL }, 0, screen, 0);
+					else GFX_blitButtonGroup((char*[]){ BTN_SLEEP==BTN_POWER?"POWER":"MENU","SLEEP",  NULL }, 0, screen, 0);
+
+					GFX_blitButtonGroup((char*[]){ "A","RESUME", NULL }, 1, screen, 1);
+					
+					Entry_free(selectedEntry);
 				}
 				else {
 					SDL_Rect preview_rect = {ox,oy,hw,hh};
 					SDL_FillRect(screen, &preview_rect, 0);
-					GFX_blitMessage(font.large, "No Preview", screen, &preview_rect);
+					GFX_blitMessage(font.large, "No Recents", screen, &preview_rect);
+					GFX_blitButtonGroup((char*[]){ "B","BACK", NULL }, 1, screen, 1);
 				}
-
-				// title pill
-				{
-					int ow = GFX_blitHardwareGroup(screen, show_setting);
-					int max_width = screen->w - SCALE1(PADDING * 2) - ow;
-					
-					char display_name[256];
-					int text_width = GFX_truncateText(font.large, selectedEntry->name, display_name, max_width, SCALE1(BUTTON_PADDING*2));
-					max_width = MIN(max_width, text_width);
-
-					SDL_Surface* text;
-					text = TTF_RenderUTF8_Blended(font.large, display_name, COLOR_WHITE);
-					GFX_blitPillLight(ASSET_WHITE_PILL, screen, &(SDL_Rect){
-						SCALE1(PADDING),
-						SCALE1(PADDING),
-						max_width,
-						SCALE1(PILL_SIZE)
-					});
-					SDL_BlitSurface(text, &(SDL_Rect){
-						0,
-						0,
-						max_width-SCALE1(BUTTON_PADDING*2),
-						text->h
-					}, screen, &(SDL_Rect){
-						SCALE1(PADDING+BUTTON_PADDING),
-						SCALE1(PADDING+4)
-					});
-					SDL_FreeSurface(text);
-				}
-
-				// pagination
-				{
-
-				}
-
-				if(can_resume) GFX_blitButtonGroup((char*[]){ "B","BACK",  NULL }, 0, screen, 0);
-				else GFX_blitButtonGroup((char*[]){ BTN_SLEEP==BTN_POWER?"POWER":"MENU","SLEEP",  NULL }, 0, screen, 0);
-
-				GFX_blitButtonGroup((char*[]){ "A","RESUME", NULL }, 1, screen, 1);
+			}
+			else {
+				updateSelectionAnimation(top->selected);
+				// list
+				if (total > 0) {
+					selected_row = top->selected - top->start;
+					remember_selection = selected_row;
+					targetY = selected_row * PILL_SIZE;
+					previousY = (previous_selected - top->start) * PILL_SIZE;
 				
-				Entry_free(selectedEntry);
-			}
-			else {
-				SDL_Rect preview_rect = {ox,oy,hw,hh};
-				SDL_FillRect(screen, &preview_rect, 0);
-				GFX_blitMessage(font.large, "No Recents", screen, &preview_rect);
-				GFX_blitButtonGroup((char*[]){ "B","BACK", NULL }, 1, screen, 1);
-			}
-		}
-		else {
-			
-			updateSelectionAnimation(top->selected);
-			// list
-			if (total > 0) {
-				int selected_row = top->selected - top->start;
-				float targetY = SCALE1(PADDING + (selected_row * PILL_SIZE));
-				float previousY = SCALE1(PADDING + ((previous_selected - top->start) * PILL_SIZE));
-			
-				float highlightY = (last_selection != selected_row) ? lerp(previousY, targetY, selection_offset) : targetY;
-				if (selection_offset >= 1.0f) {
-					last_selection = selected_row;
-				}
-			
-				for (int i = top->start, j = 0; i < top->end; i++, j++) {
-					Entry* entry = top->entries->items[i];
-					char* entry_name = entry->name;
-					char* entry_unique = entry->unique;
-					int available_width = (had_thumb ? ox : screen->w) - SCALE1(PADDING * 2);
-					if (i == top->start && !(had_thumb)) available_width -= ow;
-			
-					SDL_Color text_color = COLOR_WHITE;
-					trimSortingMeta(&entry_name);
-					if (entry_unique) trimSortingMeta(&entry_unique);
-			
-					char display_name[256];
-					int text_width = GFX_getTextWidth(font.large, entry_unique ? entry_unique : entry_name, display_name, available_width, SCALE1(BUTTON_PADDING * 2));
-					int max_width = MIN(available_width, text_width);
-			
-
-					SDL_Surface* text = TTF_RenderUTF8_Blended(font.large, display_name, text_color);
-			
-					SDL_Rect text_rect = { 0, 0, max_width - SCALE1(BUTTON_PADDING * 2), text->h };
-					SDL_Rect dest_rect = { SCALE1(PADDING + BUTTON_PADDING), SCALE1(PADDING + (j * PILL_SIZE) + 4) };
-			
-					SDL_BlitSurface(text, &text_rect, screen, &dest_rect);
-					SDL_FreeSurface(text); // Free after use
-			
-					SDL_Surface* text2 = NULL;
-			
-					if (j == selected_row) {
-
-						GFX_blitPillDark(ASSET_WHITE_PILL, screen, &(SDL_Rect){
-							SCALE1(PADDING), highlightY, max_width, SCALE1(PILL_SIZE)
-						});
-			
-						GFX_scrollTextSurface(font.large, entry_unique ? entry_unique : entry_name, &text2, available_width, SCALE1(BUTTON_PADDING), COLOR_BLACK, (highlightY != targetY) ? selection_offset : 1);
-					} 
-					else if (entry_unique) { // Only render if a unique name exists
-						char unique_name[256];
-						GFX_truncateText(font.large, entry_unique, unique_name, available_width, SCALE1(BUTTON_PADDING * 2));
-						text2 = TTF_RenderUTF8_Blended(font.large, unique_name, COLOR_DARK_TEXT);
+					highlightY = (last_selection != selected_row) ? lerp(previousY, targetY, selection_offset) : targetY;
+					if (selection_offset >= 1.0f) {
+						last_selection = selected_row;
 					}
-			
-					// Blit only if text2 was created
-					if (text2) {
-						SDL_BlitSurface(text2, &text_rect, screen, &dest_rect);
-						SDL_FreeSurface(text2);
+				
+					for (int i = top->start, j = 0; i < top->end; i++, j++) {
+						Entry* entry = top->entries->items[i];
+						char* entry_name = entry->name;
+						char* entry_unique = entry->unique;
+						int available_width = (had_thumb ? ox - SCALE1(BUTTON_MARGIN) : screen->w - SCALE1(BUTTON_PADDING)) - SCALE1(PADDING * 2);
+						if (i == top->start && !(had_thumb)) available_width -= ow;
+						SDL_Color text_color = COLOR_WHITE;
+						
+
+						
+						trimSortingMeta(&entry_name);
+
+						if (entry_unique) { // Only render if a unique name exists
+							trimSortingMeta(&entry_unique);
+						} 
+						
+						char display_name[256];
+						int text_width = GFX_getTextWidth(font.large, entry_unique ? entry_unique : entry_name,display_name, available_width, SCALE1(BUTTON_PADDING * 2));
+						int max_width = MIN(available_width, text_width);
+						SDL_Surface* text = TTF_RenderUTF8_Blended(font.large, entry_name, text_color);
+						SDL_Surface* text_unique = TTF_RenderUTF8_Blended(font.large, display_name, COLOR_DARK_TEXT);
+						SDL_Rect text_rect = { 0, 0, max_width - SCALE1(BUTTON_PADDING), text->h };
+						SDL_Rect dest_rect = { SCALE1(PADDING + BUTTON_PADDING), SCALE1(PADDING + (j * PILL_SIZE))+4 };
+						
+						
+						SDL_BlitSurface(text_unique, &text_rect, screen, &dest_rect);
+						SDL_BlitSurface(text, &text_rect, screen, &dest_rect);
+						
+						SDL_FreeSurface(text_unique); // Free after use
+						SDL_FreeSurface(text); // Free after use
+					
 					}
-				}
-			}
-			
-			else {
-				// TODO: for some reason screen's dimensions end up being 0x0 in GFX_blitMessage...
-				GFX_blitMessage(font.large, "Empty folder", screen, &(SDL_Rect){0,0,screen->w,screen->h}); //, NULL);
-			}
-	
-			// buttons
-			if (show_setting && !GetHDMI()) GFX_blitHardwareHints(screen, show_setting);
-			else if (can_resume) GFX_blitButtonGroup((char*[]){ "X","RESUME",  NULL }, 0, screen, 0);
-			else GFX_blitButtonGroup((char*[]){ 
-				BTN_SLEEP==BTN_POWER?"POWER":"MENU",
-				BTN_SLEEP==BTN_POWER||simple_mode?"SLEEP":"INFO",  
-				NULL }, 0, screen, 0);
+					for (int i = top->start, j = 0; i < top->end; i++, j++) {
+						Entry* entry = top->entries->items[i];
+						char* entry_name = entry->name;
+						char* entry_unique = entry->unique;
+						int available_width = (had_thumb ? ox + SCALE1(BUTTON_MARGIN) : screen->w - SCALE1(BUTTON_MARGIN)) - SCALE1(PADDING * 2);
+						if (i == top->start && !(had_thumb)) available_width -= ow;
+						trimSortingMeta(&entry_name);
+						char display_name[256];
+						int text_width = GFX_getTextWidth(font.large, entry_unique ? entry_unique : entry_name, display_name, available_width, SCALE1(BUTTON_PADDING * 2));
+						int max_width = MIN(available_width, text_width);
+						float inverted_offset = 1.0f - selection_offset;
+
+						if (j == selected_row) {
+							SDL_Surface* text = TTF_RenderUTF8_Blended(font.large, display_name, COLOR_BLACK);
+							SDL_Rect src_text_rect = {  0, 0, max_width - SCALE1(BUTTON_PADDING * 2), text->h };
+												
+							SDL_Rect text_rect = {  SCALE1(BUTTON_PADDING), SCALE1((last_selection != selected_row ? last_selection < selected_row ? (inverted_offset * PILL_SIZE):(inverted_offset * -PILL_SIZE):0) +4) };
+
+							SDL_Rect anim_rect = {  SCALE1(BUTTON_MARGIN),SCALE1(highlightY+PADDING) };
+							SDL_Surface *cool = SDL_CreateRGBSurface(SDL_SWSURFACE, max_width, SCALE1(PILL_SIZE), FIXED_DEPTH, RGBA_MASK_565);
+							GFX_resetScrollText();
+							GFX_blitPillDark(ASSET_WHITE_PILL, cool, &(SDL_Rect){
+								0, 0, max_width, SCALE1(PILL_SIZE)
+							});
+
+							SDL_BlitSurface(text, &src_text_rect, cool, &text_rect);
+							SDL_BlitSurface(cool, NULL, screen, &anim_rect);
+							
+							SDL_FreeSurface(cool);
+							SDL_FreeSurface(text);
+						} 
+					}
 		
-			if (total==0) {
-				if (stack->count>1) {
-					GFX_blitButtonGroup((char*[]){ "B","BACK",  NULL }, 0, screen, 1);
 				}
-			}
-			else {
-				if (stack->count>1) {
-					GFX_blitButtonGroup((char*[]){ "B","BACK", "A","OPEN", NULL }, 1, screen, 1);
+				
+				else {
+					// TODO: for some reason screen's dimensions end up being 0x0 in GFX_blitMessage...
+					GFX_blitMessage(font.large, "Empty folder", screen, &(SDL_Rect){0,0,screen->w,screen->h}); //, NULL);
+				}
+		
+				// buttons
+				if (show_setting && !GetHDMI()) GFX_blitHardwareHints(screen, show_setting);
+				else if (can_resume) GFX_blitButtonGroup((char*[]){ "X","RESUME",  NULL }, 0, screen, 0);
+				else GFX_blitButtonGroup((char*[]){ 
+					BTN_SLEEP==BTN_POWER?"POWER":"MENU",
+					BTN_SLEEP==BTN_POWER?"SLEEP":"INFO",  
+					NULL }, 0, screen, 0);
+			
+				if (total==0) {
+					if (stack->count>1) {
+						GFX_blitButtonGroup((char*[]){ "B","BACK",  NULL }, 0, screen, 1);
+					}
 				}
 				else {
-					GFX_blitButtonGroup((char*[]){ "A","OPEN", NULL }, 0, screen, 1);
+					if (stack->count>1) {
+						GFX_blitButtonGroup((char*[]){ "B","BACK", "A","OPEN", NULL }, 1, screen, 1);
+					}
+					else {
+						GFX_blitButtonGroup((char*[]){ "A","OPEN", NULL }, 0, screen, 1);
+					}
 				}
 			}
-		}
-		
-		GFX_flip(screen);
-		dirty = 0;
+			
+			GFX_flip(screen);
+			dirty = 0;
+		} else {
+			int ow = GFX_blitHardwareGroup(screen, show_setting);
+			if(!show_switcher_screen && !show_version_screen) {
+			// nondirty
+			
+			Entry* entry = top->entries->items[top->selected];
+			char* entry_name = entry->name;
+			char* entry_unique = entry->unique;
+			trimSortingMeta(&entry_name);
+			int available_width = (had_thumb ? ox + SCALE1(BUTTON_MARGIN) : screen->w - SCALE1(BUTTON_PADDING)) - SCALE1(PADDING * 2);
+			if (top->selected == top->start && !(had_thumb)) available_width -= ow;
+	 
+			if (entry_unique) { // Only render if a unique name exists
+				trimSortingMeta(&entry_unique);
+			} 
+			char display_name[256];
+			int text_width = GFX_getTextWidth(font.large, entry_unique ? entry_unique : entry_name,display_name, available_width, SCALE1(BUTTON_PADDING * 2));
+			int max_width = MIN(available_width, text_width);
 
+			
+			SDL_Surface* text2 = TTF_RenderUTF8_Blended(font.large, display_name, COLOR_BLACK);
+			SDL_Rect clear_rect = { SCALE1(BUTTON_MARGIN) + SCALE1(BUTTON_PADDING),SCALE1(PADDING + (remember_selection * PILL_SIZE) +4),max_width - ((SCALE1(BUTTON_PADDING*2))),text2->h};
+	
+			SDL_Rect dest_rect = { SCALE1(BUTTON_PADDING + BUTTON_MARGIN), SCALE1(PADDING + ((remember_selection) * PILL_SIZE) +4) };
+			
+
+			SDL_Rect src_text_rect = {  0, 0, max_width - SCALE1(BUTTON_PADDING * 2), text2->h };
+
+			SDL_FillRect(screen, &clear_rect, THEME_COLOR1);
+			GFX_scrollTextSurface(font.large, display_name, &text2,max_width - ((SCALE1(BUTTON_PADDING*2))),text2->h, 0, COLOR_BLACK, 1);
+			
+		
+			SDL_BlitSurface(text2, &src_text_rect, screen, &dest_rect);
+			SDL_FreeSurface(text2);
+			GFX_flip(screen);
+			} else {
+				GFX_sync();
+			}
+			dirty = 0;
+		}
 		// handle HDMI change
 		static int had_hdmi = -1;
 		int has_hdmi = GetHDMI();

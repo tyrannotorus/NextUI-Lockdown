@@ -24,7 +24,6 @@
 static SDL_Surface* screen;
 static int quit = 0;
 static int show_menu = 0;
-static int simple_mode = 0;
 static int thread_video = 0;
 static int was_threaded = 0;
 static int should_run_core = 1; // used by threaded video
@@ -386,9 +385,27 @@ static void Game_changeDisc(char* path) {
 
 ///////////////////////////////////////
 
-static void SRAM_getPath(char* filename) {
-	sprintf(filename, "%s/%s.sav", core.saves_dir, game.name);
+static void formatSRMPath(char* work_name, char* filename) {
+	char* tmp = strrchr(work_name, '.');
+	if (tmp != NULL && strlen(tmp) > 2 && strlen(tmp) <= 5) {
+		tmp[0] = '\0';
+	}
+	sprintf(filename, "%s/%s.srm", core.saves_dir, work_name);
 }
+
+static void SRAM_getPath(char* filename) {
+	char work_name[MAX_PATH];
+
+	if (exists(SHARED_USERDATA_PATH "/use_srm_saves")) {
+		strcpy(work_name, game.name);
+		formatSRMPath(work_name, filename);
+	} else {
+		sprintf(filename, "%s/%s.sav", core.saves_dir, game.name);
+	}
+
+	LOG_info("SRAM_getPath %s\n", filename);
+}
+
 static void SRAM_read(void) {
 	size_t sram_size = core.get_memory_size(RETRO_MEMORY_SAVE_RAM);
 	if (!sram_size) return;
@@ -3197,8 +3214,6 @@ void Menu_init(void) {
 
 	sprintf(menu.slot_path, "%s/%s.txt", menu.minui_dir, game.name);
 	
-	if (simple_mode) menu.items[ITEM_OPTS] = "Reset";
-	
 	if (game.m3u_path[0]) {
 		char* tmp;
 		strcpy(menu.base_path, game.m3u_path);
@@ -4358,8 +4373,10 @@ static void Menu_loop(void) {
 	if (restore_w!=DEVICE_WIDTH || restore_h!=DEVICE_HEIGHT) {
 		screen = GFX_resize(DEVICE_WIDTH,DEVICE_HEIGHT,DEVICE_PITCH);
 	}
-	
-	system("gametimectl.elf stop_all &");
+
+	char act[PATH_MAX];
+	sprintf(act, "gametimectl.elf stop '%s' &", replaceString2(game.path, "'", "'\\''"));
+	system(act);
 
 	SRAM_write();
 	RTC_write();
@@ -4490,27 +4507,20 @@ static void Menu_loop(void) {
 				}
 				break;
 				case ITEM_OPTS: {
-					if (simple_mode) {
-						core.reset();
-						status = STATUS_RESET;
-						show_menu = 0;
+					int old_scaling = screen_scaling;
+					Menu_options(&options_menu);
+					if (screen_scaling!=old_scaling) {
+						selectScaler(renderer.true_w,renderer.true_h,renderer.src_p);
+					
+						restore_w = screen->w;
+						restore_h = screen->h;
+						restore_p = screen->pitch;
+						screen = GFX_resize(DEVICE_WIDTH,DEVICE_HEIGHT,DEVICE_PITCH);
+					
+						SDL_FillRect(backing, NULL, 0);
+						Menu_scale(menu.bitmap, backing);
 					}
-					else {
-						int old_scaling = screen_scaling;
-						Menu_options(&options_menu);
-						if (screen_scaling!=old_scaling) {
-							selectScaler(renderer.true_w,renderer.true_h,renderer.src_p);
-						
-							restore_w = screen->w;
-							restore_h = screen->h;
-							restore_p = screen->pitch;
-							screen = GFX_resize(DEVICE_WIDTH,DEVICE_HEIGHT,DEVICE_PITCH);
-						
-							SDL_FillRect(backing, NULL, 0);
-							Menu_scale(menu.bitmap, backing);
-						}
-						dirty = 1;
-					}
+					dirty = 1;
 				}
 				break;
 				case ITEM_QUIT:
@@ -4695,7 +4705,9 @@ static void Menu_loop(void) {
 			pthread_mutex_unlock(&core_mx);
 		}
 
-		system("gametimectl.elf resume &");
+		char act[PATH_MAX];
+		sprintf(act, "gametimectl.elf start '%s' &", replaceString2(game.path, "'", "'\\''"));
+		system(act);
 	}
 	else if (exists(NOUI_PATH)) PWR_powerOff(); // TODO: won't work with threaded core, only check this once per launch
 	
@@ -4835,9 +4847,7 @@ int main(int argc , char* argv[]) {
 	Game_open(rom_path); // nes tries to load gamegenie setting before this returns ffs
 	if (!game.is_open) goto finish;
 	
-	simple_mode = exists(SIMPLE_MODE_PATH);
-	
-	// restore options
+    // restore options
 	Config_load(); // before init?
 	Config_init();
 	Config_readOptions(); // cores with boot logo option (eg. gb) need to load options early

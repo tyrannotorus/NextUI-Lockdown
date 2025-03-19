@@ -561,6 +561,14 @@ int GFX_truncateText(TTF_Font* font, const char* in_name, char* out_name, int ma
 	
 	return text_width;
 }
+int GFX_getTextHeight(TTF_Font* font, const char* in_name, char* out_name, int max_width, int padding) {
+	int text_height;
+	strcpy(out_name, in_name);
+	TTF_SizeUTF8(font, out_name, NULL, &text_height);
+	text_height += padding;
+	
+	return text_height;
+}
 int GFX_getTextWidth(TTF_Font* font, const char* in_name, char* out_name, int max_width, int padding) {
 	int text_width;
 	strcpy(out_name, in_name);
@@ -570,22 +578,24 @@ int GFX_getTextWidth(TTF_Font* font, const char* in_name, char* out_name, int ma
 	return text_width;
 }
 
-void GFX_scrollTextSurface(TTF_Font* font, const char* in_name, SDL_Surface** out_surface, int max_width, int padding, SDL_Color color, float transparency) {
-    static int text_offset = 0;
+// scrolling text stuff
+static int text_offset = 0;
+
+void GFX_resetScrollText() {
+	text_offset = 0;
+}
+void GFX_scrollTextSurface(TTF_Font* font, const char* in_name, SDL_Surface** out_surface, int max_width,int height, int padding, SDL_Color color, float transparency) {
+    
     static int frame_counter = 0;
     int text_width, text_height;
-
+	
     TTF_SizeUTF8(font, in_name, &text_width, &text_height);
 
-    int full_text_width = text_width + padding - 15; 
-
-    // Ensure transparency is within 0 to 1 range
     if (transparency < 0.0f) transparency = 0.0f;
     if (transparency > 1.0f) transparency = 1.0f;
 
-    // Convert transparency float (0 to 1) into an alpha value (0 to 255)
     Uint8 alpha = (Uint8)(transparency * 255);
-    color.a = alpha;  // Apply transparency to text color
+    color.a = alpha;  
 
     char scroll_text[1024]; 
     snprintf(scroll_text, sizeof(scroll_text), "%s  %s", in_name, in_name); 
@@ -596,18 +606,18 @@ void GFX_scrollTextSurface(TTF_Font* font, const char* in_name, SDL_Surface** ou
         return;
     }
 
-    if (text_width + padding * 2 < max_width) {
+    if (text_width <= max_width + padding) {
         text_offset = 0;  
     }
-
-    SDL_Rect src_rect = { text_offset, 0, max_width, full_text_surface->h };
-    SDL_Surface* scrolling_surface = SDL_CreateRGBSurface(0, max_width, full_text_surface->h, 32, 0xFF000000, 0x00FF0000, 0x0000FF00, 0x000000FF);
+	char adj_in_name[1024]; 
+	snprintf(adj_in_name, sizeof(adj_in_name), "%s  ", in_name); 
+    TTF_SizeUTF8(font, adj_in_name, &text_width, &text_height);
+    SDL_Rect src_rect = { text_offset, 0, text_width, height };
+    SDL_Surface* scrolling_surface = SDL_CreateRGBSurface(0, max_width, height, 32, 0xFF000000, 0x00FF0000, 0x0000FF00, 0x000000FF);
     
-    // Enable alpha blending on the new surface
     SDL_SetSurfaceBlendMode(scrolling_surface, SDL_BLENDMODE_BLEND);
     SDL_BlitSurface(full_text_surface, &src_rect, scrolling_surface, NULL);
     
-    // Apply transparency to the output surface
     SDL_SetSurfaceAlphaMod(scrolling_surface, alpha);
 
     SDL_FreeSurface(full_text_surface);
@@ -617,11 +627,11 @@ void GFX_scrollTextSurface(TTF_Font* font, const char* in_name, SDL_Surface** ou
     }
     *out_surface = scrolling_surface;
 
-    if (text_width + padding * 2 > max_width) {
+    if (text_width > max_width + padding) {
         frame_counter++;
         if (frame_counter >= 0) {  
-            text_offset += 4;  
-            if (text_offset >= full_text_width) {
+            text_offset += 2;  
+            if (text_offset >= text_width) {
                 text_offset = 0; 
             }
             frame_counter = 0;
@@ -1647,7 +1657,8 @@ void SND_init(double sample_rate, double frame_rate) { // plat_sound_init
 	LOG_info("SND_init\n");
 	currentreqfps = frame_rate;
 	SDL_InitSubSystem(SDL_INIT_AUDIO);
-	
+
+		
 #if defined(USE_SDL2)
 	LOG_info("Available audio drivers:\n");
 	for (int i=0; i<SDL_GetNumAudioDrivers(); i++) {
@@ -2316,7 +2327,7 @@ static void PWR_waitForWake(void) {
 			break;
 		}
 		SDL_Delay(200);
-		if (SDL_GetTicks()-sleep_ticks>=120000) { // increased to two minutes
+		if (SDL_GetTicks()-sleep_ticks>=30000) { // increased to two minutes
 			if (pwr.is_charging) {
 				sleep_ticks += 60000; // check again in a minute
 				continue;

@@ -41,9 +41,10 @@ char *splitString(char *str, const char *delim)
     return p + strlen(delim); // return tail substring
 }
 // TODO: verify this yields the same result as the one in minui.c, remove one
-char *replaceString2(char *orig, char *rep, char *with)
+// This one does not modify the input, cause we arent savages
+char *replaceString2(const char *orig, char *rep, char *with)
 {
-    char *ins;     // the next insert point
+    const char *ins;     // the next insert point
     char *tmp;     // varies
     int len_rep;   // length of rep (the string to remove)
     int len_with;  // length of with (the string to replace rep with)
@@ -449,6 +450,25 @@ uint64_t getMicroseconds(void) {
     ret += (uint64_t)tv.tv_usec;
 
     return ret;
+}
+
+#define max(a,b)             \
+({                           \
+    __typeof__ (a) _a = (a); \
+    __typeof__ (b) _b = (b); \
+    _a > _b ? _a : _b;       \
+})
+
+#define min(a,b)             \
+({                           \
+    __typeof__ (a) _a = (a); \
+    __typeof__ (b) _b = (b); \
+    _a < _b ? _a : _b;       \
+})
+
+int clamp(int x, int lower, int upper)
+{
+    return min(upper, max(x, lower));
 }
 
 inline Array* Array_new(void) {

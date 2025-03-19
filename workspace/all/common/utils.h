@@ -11,7 +11,7 @@ int containsString(char* haystack, char* needle);
 int hide(char* file_name);
 
 char *splitString(char *str, const char *delim);
-char *replaceString2(char *orig, char *rep, char *with);
+char *replaceString2(const char *orig, char *rep, char *with);
 size_t trimString(char *out, size_t len, const char *str, bool first);
 void removeParentheses(char *str_out, const char *str_in);
 void serializeTime(char *dest_str, int nTime);
@@ -39,6 +39,7 @@ void putInt(char* path, int value);
 int getInt(char* path);
 
 uint64_t getMicroseconds(void);
+int clamp(int x, int lower, int upper);
 
 enum EntryType {
 	ENTRY_DIR,
