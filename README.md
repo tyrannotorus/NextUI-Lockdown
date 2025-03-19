@@ -1,12 +1,12 @@
 # NextUI Lockdown
-NextUI Lockdown aims to support all the goodness of NextUI (for the TriumUI Brick), but with the ability to quickly lock all settings with the konami code.
+NextUI Lockdown aims to support all the goodness of NextUI (for the TriumUI Brick), but with the ability to quickly enable Simple Mode with the konami code.
 Useful for when:
 1. You want an even more bare-bones minui look, but still want options/settings available when needed.
 2. You hand your retro doodad to your nephew to play at Thanksgiving and don't want him messing with settings on accident.
 3. When you gift a retro doodad to your technically-illiterate uncle who's melted his brain with Fox News over the last 10 years and he's fully replaced you and all interaction with his family with russian bots on facebook and he can no longer recall joy in his life, including when you two played Super Mario together when you were a kid and you loved your uncle and you just want to give him that little bit of human joy back and go "Hey, do you remember Super Mario? Remember the fun we had? Remember?" Uh, purely hypothetically speaking on this one.
 
-# In Progress : Lockdown Mode.
-  Konami Code enterable at the version screen to enable/disable lockdown. Lockdown mode should:
+# In Progress : Simple Mode.
+  Konami Code enterable at the version screen to enable/disable Simple Mode. Simple Mode should:
   - [x] Hide Tools folder 
   - [x] Hide Favourites
   - [x] Hide Collections
